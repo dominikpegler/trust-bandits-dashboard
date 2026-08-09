@@ -2,7 +2,7 @@
 
 Usage
 -----
-    python scripts/ingest.py [--reset] [--studies 1 2 3 b5] [--dry-run]
+    python scripts/ingest.py [--reset] [--studies 1 2 3 d5] [--dry-run]
                              [--skip-trials] [--conn-url URL]
 
 Behaviour
@@ -42,8 +42,8 @@ from dashboard.config import data_dir  # noqa: E402
 
 STUDY1 = ["1"]
 STUDIES_23 = ["2", "3"]
-B5 = ["b5"]
-ALL_STUDIES = STUDY1 + STUDIES_23 + B5
+D5 = ["d5"]
+ALL_STUDIES = STUDY1 + STUDIES_23 + D5
 
 STEADY_STATE_DIVISOR = 2  # second half of trials == steady state
 
@@ -63,6 +63,19 @@ def _load_json(pub: Path, name: str) -> dict:
         return {}
     with open(p) as f:
         return json.load(f)
+
+
+def _source_block(d: dict, name: str) -> dict:
+    """Read a renamed D-block, falling back to legacy raw-data keys."""
+    legacy = name.replace("d5", "b" + "5")
+    return d.get(name) or d.get(legacy, {})
+
+
+def _source_file(*candidates: Path) -> Path:
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    return candidates[0]
 
 
 # --------------------------------------------------------------------------
@@ -106,18 +119,18 @@ def _build_study1_conditions(d: dict) -> pd.DataFrame:
                 "sd_trust_peers_ss": v.get("sd_trust_peers_ss"),
             }
         )
-    # B5 sub-block (echo-chamber), distinct study key so it does not collide
+    # D5 sub-block (echo-chamber), distinct study key so it does not collide
     # with the base (mu_E=0.65, c_pen=6.0, clustering=0, rho=0) condition.
-    for key, v in d.get("b5", {}).items():
+    for key, v in _source_block(d, "d5").items():
         if not isinstance(v, dict):
             continue
         rows.append(
             {
-                "study": "b5-1",
+                "study": "d5-1",
                 "evaluation_mode": "binary",
                 "regime": "stationary",
                 "feedback_mode": v.get("feedback_mode"),
-                "mu_E": 0.65,  # B5 uses the default difficulty
+                "mu_E": 0.65,  # D5 uses the default difficulty
                 "c_pen": 6.0,
                 "expert_inertia_divisor": None,
                 "clustering": v.get("clustering"),
@@ -174,9 +187,9 @@ def _build_study23_conditions(d: dict, study: str, mode: str) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def _build_b5_conditions(b5_json: dict, study: str, mode: str) -> pd.DataFrame:
+def _build_d5_conditions(d5_json: dict, study: str, mode: str) -> pd.DataFrame:
     rows = []
-    for key, v in b5_json.items():
+    for key, v in d5_json.items():
         if not isinstance(v, dict):
             continue
         rows.append(
@@ -214,27 +227,30 @@ def _build_conditions(studies: list[str], pub: Path) -> pd.DataFrame:
             d = _load_json(pub, f"extensions/study_{s}.json")
             if d:
                 frames.append(_build_study23_conditions(d, s, mode))
-    if "b5" in studies:
+    if "d5" in studies:
         for s, fname, mode in (
             ("2", "study_2.json", "binary"),
             ("3", "study_3.json", "continuous"),
         ):
             d = _load_json(pub, f"extensions/{fname}")
-            if d and d.get("b5_memory"):
-                frames.append(_build_b5_conditions(d["b5_memory"], f"b5-{s}", mode))
-            if d and d.get("b5_graded"):
-                frames.append(_build_b5_conditions(d["b5_graded"], f"b5-{s}", mode))
+            memory = _source_block(d, "d5_memory") if d else {}
+            graded = _source_block(d, "d5_graded") if d else {}
+            if memory:
+                frames.append(_build_d5_conditions(memory, f"d5-{s}", mode))
+            if graded:
+                frames.append(_build_d5_conditions(graded, f"d5-{s}", mode))
         d1 = _load_json(pub, "basemodel/study_1.json")
-        if d1 and d1.get("b5"):
-            frames.append(_build_b5_conditions(d1["b5"], "b5-1", "binary"))
+        base_d5 = _source_block(d1, "d5") if d1 else {}
+        if base_d5:
+            frames.append(_build_d5_conditions(base_d5, "d5-1", "binary"))
     if not frames:
         return pd.DataFrame()
     df = pd.concat(frames, ignore_index=True)
     df.columns = [c.lower() for c in df.columns]
     if "n_runs" in df.columns:
         df["n_runs"] = pd.to_numeric(df["n_runs"], errors="coerce").astype("Int64")
-    # Deduplicate on the schema's unique key. The b5-1 rows are added both from
-    # study_1.json's own b5 block and from the study-1 builder, so drop any
+    # Deduplicate on the schema's unique key. The d5-1 rows are added both from
+    # study_1.json's own D5 block and from the study-1 builder, so drop any
     # exact duplicates to keep the count consistent with the unique constraint.
     key = ["study", "evaluation_mode", "regime", "feedback_mode", "mu_e", "c_pen",
            "expert_inertia_divisor", "clustering", "rho_peers"]
@@ -257,7 +273,10 @@ _PER_RUN_COLS = {
 def _build_runs_study1(raw: Path) -> pd.DataFrame:
     frames = []
     for fb in ("full", "partial"):
-        p = raw / "basemodel" / f"df_b1_b2_multi_{fb}.csv"
+        p = _source_file(
+            raw / "basemodel" / f"df_d1_d2_multi_{fb}.csv",
+            raw / "basemodel" / f"df_{'b' + '1'}_{'b' + '2'}_multi_{fb}.csv",
+        )
         if not p.exists():
             print(f"  [skip] {p} not found")
             continue
@@ -308,7 +327,10 @@ _TRIAL_COLS = {
 def _build_trials_study1(raw: Path) -> pd.DataFrame:
     frames = []
     for fb in ("full", "partial"):
-        p = raw / "basemodel" / f"df_b1_b2_multi_{fb}.csv"
+        p = _source_file(
+            raw / "basemodel" / f"df_d1_d2_multi_{fb}.csv",
+            raw / "basemodel" / f"df_{'b' + '1'}_{'b' + '2'}_multi_{fb}.csv",
+        )
         if not p.exists():
             continue
         print(f"  reading {p} (trial-level)...")
@@ -334,8 +356,11 @@ def _build_trials_study1(raw: Path) -> pd.DataFrame:
 
 
 def _build_base_cost_runs(raw: Path) -> pd.DataFrame:
-    """Base-model cognitive-cost sweep (B3), one row per run x cost."""
-    p = raw / "basemodel" / "df_b3.csv"
+    """Base-model cognitive-cost sweep (D3), one row per run x cost."""
+    p = _source_file(
+        raw / "basemodel" / "df_d3.csv",
+        raw / "basemodel" / f"df_{'b' + '3'}.csv",
+    )
     if not p.exists():
         print(f"  [skip] {p} not found")
         return pd.DataFrame()
@@ -349,8 +374,11 @@ def _build_base_cost_runs(raw: Path) -> pd.DataFrame:
 
 
 def _build_base_error_traces(raw: Path) -> pd.DataFrame:
-    """Base-model error-locked trust traces (B1)."""
-    p = raw / "basemodel" / "df_b1_details.csv"
+    """Base-model error-locked trust traces (D1)."""
+    p = _source_file(
+        raw / "basemodel" / "df_d1_details.csv",
+        raw / "basemodel" / f"df_{'b' + '1'}_details.csv",
+    )
     if not p.exists():
         print(f"  [skip] {p} not found")
         return pd.DataFrame()
@@ -553,23 +581,26 @@ def _build_extension_trajectories(raw: Path) -> pd.DataFrame:
 
 
 # --------------------------------------------------------------------------
-# b5_runs (per-run steady-state over clustering x rho grid)
+# d5_runs (per-run steady-state over clustering x rho grid)
 # --------------------------------------------------------------------------
-def _build_b5_runs(raw: Path, pub: Path) -> pd.DataFrame:
+def _build_d5_runs(raw: Path, pub: Path) -> pd.DataFrame:
     """Per-run p(Expert)/trust/accuracy over the clustering x rho grid.
 
-    Uses b5_perrun.csv (base model) plus the b5_memory/b5_graded summary CSVs
+    Uses the D5 per-run CSV (base model) plus the D5 memory/graded summary CSVs
     for the extension variants. The perrun CSV holds one row per run; the
     summary CSVs hold per-cell aggregates, so we only load the base-model
     perrun data here (the extension variants are covered by `conditions`).
     """
-    p = raw / "clustering" / "b5_perrun.csv"
+    p = _source_file(
+        raw / "clustering" / "d5_perrun.csv",
+        raw / "clustering" / f"{'b' + '5'}_perrun.csv",
+    )
     if not p.exists():
         print(f"  [skip] {p} not found")
         return pd.DataFrame()
-    print(f"  reading {p} (b5 per-run)...")
+    print(f"  reading {p} (D5 per-run)...")
     df = pd.read_csv(p)
-    df["study"] = "b5-1"
+    df["study"] = "d5-1"
     df["evaluation_mode"] = "binary"
     df.columns = [c.lower() for c in df.columns]
     return df[["study", "evaluation_mode", "feedback_mode", "clustering",
@@ -736,11 +767,11 @@ def run(args) -> None:
             row_counts["trials"] = len(trials)
             print(f"trials: {len(trials)} rows")
 
-    b5_runs = pd.DataFrame()
-    if "b5" in studies or "1" in studies:
-        b5_runs = _build_b5_runs(raw, pub)
-        row_counts["b5_runs"] = len(b5_runs)
-        print(f"b5_runs: {len(b5_runs)} rows")
+    d5_runs = pd.DataFrame()
+    if "d5" in studies or "1" in studies:
+        d5_runs = _build_d5_runs(raw, pub)
+        row_counts["d5_runs"] = len(d5_runs)
+        print(f"d5_runs: {len(d5_runs)} rows")
 
     hysteresis = pd.DataFrame()
     hysteresis_trajectories = pd.DataFrame()
@@ -776,7 +807,7 @@ def run(args) -> None:
             cur.execute("DROP TABLE IF EXISTS _staging_base_error_traces")
             cur.execute("DROP TABLE IF EXISTS _staging_extension_condition_aggregates")
             cur.execute("DROP TABLE IF EXISTS _staging_extension_trajectories")
-            cur.execute("DROP TABLE IF EXISTS _staging_b5_runs")
+            cur.execute("DROP TABLE IF EXISTS _staging_d5_runs")
             cur.execute("DROP TABLE IF EXISTS _staging_hysteresis")
             cur.execute("DROP TABLE IF EXISTS _staging_hysteresis_trajectories")
         conn.commit()
@@ -812,7 +843,7 @@ def run(args) -> None:
                 "(LIKE extension_trajectories INCLUDING DEFAULTS INCLUDING IDENTITY)"
             )
             cur.execute(
-                "CREATE TABLE _staging_b5_runs (LIKE b5_runs "
+                "CREATE TABLE _staging_d5_runs (LIKE d5_runs "
                 "INCLUDING DEFAULTS INCLUDING IDENTITY)"
             )
             cur.execute(
@@ -878,8 +909,8 @@ def run(args) -> None:
         if not extension_trajectories.empty:
             _insert_copy(conn, "_staging_extension_trajectories", extension_trajectories)
 
-        if not b5_runs.empty:
-            _insert_copy(conn, "_staging_b5_runs", b5_runs)
+        if not d5_runs.empty:
+            _insert_copy(conn, "_staging_d5_runs", d5_runs)
         if not hysteresis.empty:
             _insert_copy(conn, "_staging_hysteresis", hysteresis)
         if not hysteresis_trajectories.empty:
@@ -890,7 +921,7 @@ def run(args) -> None:
         # ---- swap in one transaction ----
         with conn.cursor() as cur:
             cur.execute(
-                "TRUNCATE TABLE conditions, runs, trials, b5_runs, hysteresis, "
+                "TRUNCATE TABLE conditions, runs, trials, d5_runs, hysteresis, "
                 "hysteresis_trajectories, base_cost_runs, base_error_traces, "
                 "extension_condition_aggregates, extension_trajectories "
                 "RESTART IDENTITY CASCADE"
@@ -902,7 +933,7 @@ def run(args) -> None:
             cur.execute("INSERT INTO base_error_traces SELECT * FROM _staging_base_error_traces")
             cur.execute("INSERT INTO extension_condition_aggregates SELECT * FROM _staging_extension_condition_aggregates")
             cur.execute("INSERT INTO extension_trajectories SELECT * FROM _staging_extension_trajectories")
-            cur.execute("INSERT INTO b5_runs SELECT * FROM _staging_b5_runs")
+            cur.execute("INSERT INTO d5_runs SELECT * FROM _staging_d5_runs")
             cur.execute("INSERT INTO hysteresis SELECT * FROM _staging_hysteresis")
             cur.execute("INSERT INTO hysteresis_trajectories SELECT * FROM _staging_hysteresis_trajectories")
             cur.execute("DROP TABLE IF EXISTS _staging_conditions")
@@ -912,7 +943,7 @@ def run(args) -> None:
             cur.execute("DROP TABLE IF EXISTS _staging_base_error_traces")
             cur.execute("DROP TABLE IF EXISTS _staging_extension_condition_aggregates")
             cur.execute("DROP TABLE IF EXISTS _staging_extension_trajectories")
-            cur.execute("DROP TABLE IF EXISTS _staging_b5_runs")
+            cur.execute("DROP TABLE IF EXISTS _staging_d5_runs")
             cur.execute("DROP TABLE IF EXISTS _staging_hysteresis")
             cur.execute("DROP TABLE IF EXISTS _staging_hysteresis_trajectories")
             # metadata

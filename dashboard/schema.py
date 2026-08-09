@@ -4,7 +4,7 @@ SCHEMA = """
 -- Aggregated means/SDs per condition, pulled from the study_*.json files.
 CREATE TABLE IF NOT EXISTS conditions (
     id                       BIGSERIAL PRIMARY KEY,
-    study                    TEXT        NOT NULL,          -- 1, 2, 3, b5
+    study                    TEXT        NOT NULL,          -- 1, 2, 3, d5
     evaluation_mode          TEXT        NOT NULL,          -- binary | continuous
     regime                   TEXT        NOT NULL,          -- stationary | cyclic
     feedback_mode            TEXT        NOT NULL,          -- full | partial
@@ -43,7 +43,7 @@ CREATE TABLE IF NOT EXISTS conditions (
     mean_acc_expert_cont_ss  DOUBLE PRECISION,
     mean_acc_peers_cont_ss   DOUBLE PRECISION,
 
-    -- b5 fields
+    -- D5 fields
     frac_low                 DOUBLE PRECISION,
     frac_high                DOUBLE PRECISION,
     n_runs                   INTEGER,
@@ -97,7 +97,7 @@ CREATE TABLE IF NOT EXISTS trials (
 CREATE INDEX IF NOT EXISTS trials_cond_run_idx
     ON trials(evaluation_mode, condition_id, run_id, trial);
 
--- Base-model cognitive-cost sweep (B3): one row per run x cost condition.
+-- Base-model cognitive-cost sweep (D3): one row per run x cost condition.
 CREATE TABLE IF NOT EXISTS base_cost_runs (
     id                BIGSERIAL PRIMARY KEY,
     feedback_mode     TEXT        NOT NULL,
@@ -113,7 +113,7 @@ CREATE TABLE IF NOT EXISTS base_cost_runs (
 CREATE INDEX IF NOT EXISTS base_cost_runs_idx
     ON base_cost_runs(feedback_mode, cost_sum);
 
--- Base-model error-locked trust traces (B1): one row per run x source x offset.
+-- Base-model error-locked trust traces (D1): one row per run x source x offset.
 CREATE TABLE IF NOT EXISTS base_error_traces (
     id             BIGSERIAL PRIMARY KEY,
     feedback_mode  TEXT        NOT NULL,
@@ -193,10 +193,10 @@ CREATE TABLE IF NOT EXISTS extension_trajectories (
 CREATE INDEX IF NOT EXISTS extension_trajectories_idx
     ON extension_trajectories(study, evaluation_mode, regime, feedback_mode, mu_e, expert_inertia_divisor, c_pen, trial);
 
--- B5 echo-chamber: per-run steady-state values over the clustering x rho grid.
-CREATE TABLE IF NOT EXISTS b5_runs (
+-- D5 echo-chamber: per-run steady-state values over the clustering x rho grid.
+CREATE TABLE IF NOT EXISTS d5_runs (
     id             BIGSERIAL PRIMARY KEY,
-    study          TEXT        NOT NULL,          -- b5-1, b5-2, b5-3
+    study          TEXT        NOT NULL,          -- d5-1, d5-2, d5-3
     evaluation_mode TEXT       NOT NULL,          -- binary | continuous
     feedback_mode  TEXT        NOT NULL,
     clustering     DOUBLE PRECISION NOT NULL,
@@ -209,8 +209,8 @@ CREATE TABLE IF NOT EXISTS b5_runs (
     acc_peers      DOUBLE PRECISION,
     UNIQUE (study, evaluation_mode, feedback_mode, clustering, rho_peers, run_id)
 );
-CREATE INDEX IF NOT EXISTS b5_runs_grid_idx
-    ON b5_runs(study, evaluation_mode, feedback_mode, clustering, rho_peers);
+CREATE INDEX IF NOT EXISTS d5_runs_grid_idx
+    ON d5_runs(study, evaluation_mode, feedback_mode, clustering, rho_peers);
 
 -- Hysteresis: baseline vs post-collapse initial-trust comparison (Studies 2/3).
 CREATE TABLE IF NOT EXISTS hysteresis (

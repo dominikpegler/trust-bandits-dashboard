@@ -230,7 +230,7 @@ def base_paradox_heatmap_figure(
     representative_mu: float = 0.65,
     representative_c_pen: float = 6.0,
 ) -> go.Figure:
-    """Paper-style base-model B1 heatmap.
+    """Paper-style base-model D1 heatmap.
 
     Color encodes p(Expert), text encodes accuracy gap Expert - Peers,
     white outlines mark paradox cells, and the red outline marks the
@@ -654,7 +654,7 @@ def _add_stats_annotation(fig: go.Figure, metric: str, stats: dict) -> None:
     )
 
 
-def b5_bifurcation_figure(
+def d5_bifurcation_figure(
     df: pd.DataFrame,
     clustering_levels: list,
     rho_levels: list,
@@ -664,7 +664,7 @@ def b5_bifurcation_figure(
     """Grid of per-run distributions over (clustering x rho_peers).
 
     Each cell is a histogram of the per-run metric value, with a dashed line at
-    0.5 for p(Expert). Mirrors the paper's B5 bifurcation figure.
+    0.5 for p(Expert). Mirrors the paper's D5 bifurcation figure.
     """
     from plotly.subplots import make_subplots
 

@@ -16,10 +16,10 @@ st.markdown(
 )
 
 # Only the base model has per-run polarization data so far.
-b5_study = "b5-1"
-b5 = [s for s in loaders.available_studies() if s == b5_study]
-if not b5:
-    st.warning("No polarization-extension data in the database. Run `python scripts/ingest.py --studies b5`.")
+d5_study = "d5-1"
+d5 = [s for s in loaders.available_studies() if s == d5_study]
+if not d5:
+    st.warning("No polarization-extension data in the database. Run `python scripts/ingest.py --studies d5`.")
     st.stop()
 
 with st.sidebar:
@@ -27,8 +27,8 @@ with st.sidebar:
     st.caption("Polarization extension (base model)")
     feedback = st.selectbox("Feedback mode", ["full", "partial"])
 
-clust_levels, rho_levels = loaders.b5_grid_levels(b5_study)
-df = loaders.b5_runs_data(b5_study, feedback, "p_expert")
+clust_levels, rho_levels = loaders.d5_grid_levels(d5_study)
+df = loaders.d5_runs_data(d5_study, feedback, "p_expert")
 if df.empty:
     st.warning("No data for this selection.")
     st.stop()
@@ -46,7 +46,7 @@ metadata_box(
         ("Grid", "ρ<sub>clust</sub> × ρ<sub>peer</sub>"),
     ]
 )
-fig = plotting.b5_bifurcation_figure(
+fig = plotting.d5_bifurcation_figure(
     df, clust_levels, rho_levels, "p_expert",
     title=f"Polarization extension (base model) · feedback={feedback} · N = {n_runs} runs per cell",
 )
@@ -58,12 +58,12 @@ with st.expander("Explore trust distributions"):
         ["trust_expert", "trust_peers"],
         format_func=lambda m: plotting.METRIC_LABELS.get(m, m),
     )
-    trust_df = loaders.b5_runs_data(b5_study, feedback, trust_metric)
+    trust_df = loaders.d5_runs_data(d5_study, feedback, trust_metric)
     if trust_df.empty:
         st.warning("No data for this selection.")
     else:
         st.plotly_chart(
-            plotting.b5_bifurcation_figure(
+            plotting.d5_bifurcation_figure(
                 trust_df,
                 clust_levels,
                 rho_levels,
@@ -80,7 +80,7 @@ st.subheader("Bifurcation strength (SD across runs)")
 cols = st.columns(2)
 for col, fb in zip(cols, ["full", "partial"]):
     with col:
-        sd_df = loaders.b5_runs_data(b5_study, fb, "p_expert")
+        sd_df = loaders.d5_runs_data(d5_study, fb, "p_expert")
         sd_grid = (
             sd_df.groupby(["clustering", "rho_peers"])["value"]
             .std()

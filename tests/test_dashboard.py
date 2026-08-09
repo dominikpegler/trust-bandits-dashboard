@@ -26,7 +26,7 @@ def test_schema_tables_exist(engine):
     with engine.connect() as c:
         for t in (
             "conditions", "runs", "trials", "base_cost_runs", "base_error_traces",
-            "extension_condition_aggregates", "extension_trajectories", "b5_runs",
+            "extension_condition_aggregates", "extension_trajectories", "d5_runs",
             "hysteresis", "hysteresis_trajectories", "ingest_meta",
         ):
             row = c.exec_driver_sql(
@@ -96,8 +96,8 @@ def test_extension_trajectory_data(engine):
     assert {"mean_p_expert", "mean_trust_expert", "mean_acc_expert"}.issubset(df.columns)
 
 
-def test_b5_runs(engine):
-    df = loaders.b5_runs_data("b5-1", "partial")
+def test_d5_runs(engine):
+    df = loaders.d5_runs_data("d5-1", "partial")
     assert not df.empty
     assert "value" in df.columns
 
@@ -108,12 +108,12 @@ def test_hysteresis(engine):
     assert "init_condition" in df.columns
 
 
-def test_base_b2_b3_error_trace(engine):
-    b2 = loaders.base_difficulty_data("full")
-    b3 = loaders.base_cost_data("full")
+def test_base_d2_d3_error_trace(engine):
+    d2 = loaders.base_difficulty_data("full")
+    d3 = loaders.base_cost_data("full")
     err = loaders.base_error_trace_data("full")
-    assert b2["mu_e"].nunique() == 8
-    assert b3["cost_sum"].nunique() == 6
+    assert d2["mu_e"].nunique() == 8
+    assert d3["cost_sum"].nunique() == 6
     assert set(err["source"].unique()) == {"Expert", "Peers"}
 
 

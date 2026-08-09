@@ -11,6 +11,11 @@ from =../trust-bandits-analysis= for the live simulator.
 Dashboard terminology is **Expert/Peers** throughout, even where the paper
 figures may use Tower/Square.
 
+Panel nomenclature is **D1-D5** throughout, where **D = Dynamics**. Older
+Behavior-style labels and internal names were renamed; =db.init_db()= performs a
+compatibility migration from the previous polarization table/study keys to
+=d5_runs= / =d5-*= when opening an existing development database.
+
 * Local Development
 
 #+begin_src bash
@@ -38,7 +43,7 @@ loader functions.
 The ingest script performs an atomic reset-and-refill via staging tables:
 
 #+begin_src bash
-python scripts/ingest.py --studies 1 2 3 b5
+python scripts/ingest.py --studies 1 2 3 d5
 #+end_src
 
 Use =--skip-trials= for faster iteration when base-model trajectory data are not
@@ -51,7 +56,7 @@ Current full local ingest row counts:
 - =base_cost_runs=: 12000
 - =base_error_traces=: 757344
 - =trials=: 6400000
-- =b5_runs=: 25000
+- =d5_runs=: 25000
 - =hysteresis=: 12
 - =hysteresis_trajectories=: 1600
 
@@ -60,11 +65,11 @@ Current full local ingest row counts:
 - =conditions=: condition-level aggregates from JSON exports.
 - =runs=: base-model per-run means over all =mu_E × c_pen × feedback= cells.
 - =trials=: base-model trial-level data for trajectory exploration.
-- =base_cost_runs=: B3 cognitive-cost sweep from =df_b3.csv=.
-- =base_error_traces=: paper representative base-model error-locked traces from
-  =df_b1_details.csv=. Kept for reference.
-- =b5_runs=: base-model polarization per-run steady-state values from
-  =b5_perrun.csv=.
+- =base_cost_runs=: D3 cognitive-cost sweep from the D3 source CSV.
+- =base_error_traces=: paper representative base-model D1 error-locked traces.
+  Kept for reference.
+- =d5_runs=: base-model polarization per-run steady-state values from the D5
+  per-run source CSV.
 - =hysteresis=: hysteresis JSON summary values.
 - =hysteresis_trajectories=: per-trial aggregate hysteresis trajectories from
   =df_ext_hyst.csv=.
@@ -80,7 +85,7 @@ Current full local ingest row counts:
 
 1. =1_Base_Model.py=
    - Paper-aligned base-model page.
-   - Shows B1 p(Expert) heatmap with accuracy-gap text, paradox cell outlines,
+   - Shows D1 p(Expert) heatmap with accuracy-gap text, paradox cell outlines,
      and red outline for the currently selected condition.
    - Selected =mu_E= and =c_pen= are sidebar controls; downstream dynamics update
      to the selected cell.
@@ -88,7 +93,7 @@ Current full local ingest row counts:
      trial data (not fixed to the paper condition).
    - Selected-condition trust, accuracy, p(Expert), and trajectory data are folded
      into this page; the standalone trajectory explorer has been removed.
-   - Includes B2/B3 panels: source accuracy by =mu_E=, stacked p(Expert) by
+   - Includes D2/D3 panels: source accuracy by =mu_E=, stacked p(Expert) by
      =mu_E=, stacked p(Expert) by cognitive cost.
    - Generic metric heatmap is available in an exploratory expander.
 
@@ -139,11 +144,11 @@ Current test status: 15 tests passing.
 
 Aligned or mostly aligned:
 
-- Base-model B1 heatmap logic (p(Expert) color, accuracy-gap text, paradox
+- Base-model D1 heatmap logic (p(Expert) color, accuracy-gap text, paradox
   outlines, selected-condition red outline).
 - Base-model selected-condition trajectories are folded into the Base Model page;
   the standalone trajectory page has been removed.
-- Base-model B2/B3 panels, using source colors and stacked p(Expert)/p(Peers)
+- Base-model D2/D3 panels, using source colors and stacked p(Expert)/p(Peers)
   areas with 95% CIs.
 - Memory/graded main paper heatmaps are p(Expert)-only, with other metrics moved
   into exploratory expanders.

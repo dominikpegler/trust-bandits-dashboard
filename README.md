@@ -59,7 +59,7 @@ Or, equivalently, the individual `AZURE_PG_*` variables (see
 ## Populate the database
 
 ```bash
-python scripts/ingest.py --studies 1 2 3 b5   # reset-and-refill, all studies
+python scripts/ingest.py --studies 1 2 3 d5   # reset-and-refill, all studies
 python scripts/ingest.py --studies 1 --skip-trials   # faster, no trial-level
 python scripts/ingest.py --dry-run            # show what would be ingested
 ```
@@ -110,7 +110,7 @@ trial-level data isn't loaded).
 
 ## Notes
 
-- The Base Model page uses binary, stationary base-model data for the main B1
+- The Base Model page uses binary, stationary base-model data for the main D1
   heatmap and folds selected-condition trajectories into the same page.
 - The Memory and Graded-Evaluation pages keep the main paper-style heatmaps
   fixed to `p(Expert)`; trust and accuracy heatmaps are available in exploratory

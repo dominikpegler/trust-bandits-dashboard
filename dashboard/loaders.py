@@ -13,16 +13,16 @@ METRIC_COLUMNS = {
     "trust_peers": ("mean_trust_peers", "mean_trust_peers_ss", "sd_trust_peers", "sd_trust_peers_ss"),
 }
 
-STUDIES = ("1", "2", "3", "b5-1", "b5-2", "b5-3")
+STUDIES = ("1", "2", "3", "d5-1", "d5-2", "d5-3")
 
 # Friendly model names for display (the codes stay as internal query keys).
 STUDY_LABELS = {
     "1": "Base model",
     "2": "Memory model",
     "3": "Graded-evaluation model",
-    "b5-1": "Polarization extension (base model)",
-    "b5-2": "Polarization extension (memory model)",
-    "b5-3": "Polarization extension (graded-evaluation model)",
+    "d5-1": "Polarization extension (base model)",
+    "d5-2": "Polarization extension (memory model)",
+    "d5-3": "Polarization extension (graded-evaluation model)",
 }
 
 
@@ -133,10 +133,10 @@ def marginal_data(
 
 
 # --------------------------------------------------------------------------
-# Base-model paper panels (B1-B3)
+# Base-model paper panels (D1-D3)
 # --------------------------------------------------------------------------
 def base_heatmap_cells(feedback_mode: str = "full", steady: bool = True) -> pd.DataFrame:
-    """Cell-level base-model B1 data for the paper-style heatmap."""
+    """Cell-level base-model D1 data for the paper-style heatmap."""
     suffix = "_ss" if steady else ""
     q = f"""
         SELECT mu_e, c_pen, feedback_mode, n_runs,
@@ -159,7 +159,7 @@ def base_heatmap_cells(feedback_mode: str = "full", steady: bool = True) -> pd.D
 
 
 def base_difficulty_data(feedback_mode: str = "full") -> pd.DataFrame:
-    """B2: source accuracy and p(Expert) by mu_E at c_pen=6."""
+    """D2: source accuracy and p(Expert) by mu_E at c_pen=6."""
     q = """
         SELECT c.mu_e, c.c_pen, c.feedback_mode, r.run_id,
                r.mean_p_expert AS p_expert,
@@ -176,7 +176,7 @@ def base_difficulty_data(feedback_mode: str = "full") -> pd.DataFrame:
 
 
 def base_cost_data(feedback_mode: str = "full") -> pd.DataFrame:
-    """B3: p(Expert) by cognitive cost weight."""
+    """D3: p(Expert) by cognitive cost weight."""
     q = """
         SELECT feedback_mode, run_id, cost_w_n, cost_w_var, cost_sum,
                mean_p_expert AS p_expert,
@@ -190,7 +190,7 @@ def base_cost_data(feedback_mode: str = "full") -> pd.DataFrame:
 
 
 def base_error_trace_data(feedback_mode: str = "full") -> pd.DataFrame:
-    """B1 error-locked trust changes around source errors."""
+    """D1 error-locked trust changes around source errors."""
     q = """
         SELECT feedback_mode, run_id, trial_offset AS offset, source, trust_norm
         FROM base_error_traces
@@ -527,10 +527,10 @@ def extension_trajectory_data(
 
 
 # --------------------------------------------------------------------------
-# B5 bifurcation (per-run distributions)
+# D5 bifurcation (per-run distributions)
 # --------------------------------------------------------------------------
-def b5_runs_data(
-    study: str = "b5-1",
+def d5_runs_data(
+    study: str = "d5-1",
     feedback_mode: str = "partial",
     metric: str = "p_expert",
 ) -> pd.DataFrame:
@@ -539,16 +539,16 @@ def b5_runs_data(
            "trust_peers": "trust_peers"}.get(metric, "p_expert")
     return db.fetch_df(
         f"""SELECT clustering, rho_peers, run_id, {col} AS value
-            FROM b5_runs
+            FROM d5_runs
             WHERE study = :study AND feedback_mode = :feedback_mode
             ORDER BY clustering, rho_peers, run_id""",
         {"study": study, "feedback_mode": feedback_mode},
     )
 
 
-def b5_grid_levels(study: str = "b5-1") -> tuple:
+def d5_grid_levels(study: str = "d5-1") -> tuple:
     df = db.fetch_df(
-        """SELECT DISTINCT clustering, rho_peers FROM b5_runs
+        """SELECT DISTINCT clustering, rho_peers FROM d5_runs
            WHERE study = :study ORDER BY clustering, rho_peers""",
         {"study": study},
     )

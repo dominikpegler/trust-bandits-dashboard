@@ -50,7 +50,7 @@ metadata_box(
     ]
 )
 
-st.subheader("B1: Expert fragility heatmap")
+st.subheader("D1: Expert fragility heatmap")
 st.markdown(
     "Color encodes mean p(Expert). White numbers are the accuracy gap "
     "(Expert − Peers). White outlines mark expert-fragility cells where the "
@@ -118,19 +118,19 @@ else:
         with st.expander("Selected-condition trajectory data"):
             st.dataframe(traj, use_container_width=True)
 
-st.subheader("B2/B3: Difficulty and cognitive-cost effects")
-b2 = loaders.base_difficulty_data(feedback)
-b3 = loaders.base_cost_data(feedback)
-if b2.empty or b3.empty:
-    st.warning("B2/B3 data are missing. Run a full ingest to load base-model support tables.")
+st.subheader("D2/D3: Difficulty and cognitive-cost effects")
+d2 = loaders.base_difficulty_data(feedback)
+d3 = loaders.base_cost_data(feedback)
+if d2.empty or d3.empty:
+    st.warning("D2/D3 data are missing. Run a full ingest to load base-model support tables.")
 else:
     col1, col2, col3 = st.columns(3)
     with col1:
-        st.plotly_chart(plotting.source_accuracy_by_mu_figure(b2), use_container_width=True)
+        st.plotly_chart(plotting.source_accuracy_by_mu_figure(d2), use_container_width=True)
     with col2:
         st.plotly_chart(
             plotting.choice_area_ci_figure(
-                b2,
+                d2,
                 "mu_e",
                 title="p(Expert) by evidence strength",
                 x_label="Evidence strength (μ<sub>E</sub>)",
@@ -140,7 +140,7 @@ else:
     with col3:
         st.plotly_chart(
             plotting.choice_area_ci_figure(
-                b3,
+                d3,
                 "cost_sum",
                 title="p(Expert) by cognitive cost",
                 x_label="Cognitive cost weight (w<sub>N</sub> + w<sub>var</sub>)",

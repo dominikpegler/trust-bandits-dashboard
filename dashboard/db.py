@@ -46,7 +46,31 @@ def init_db() -> None:
     """Create tables/partitions if they do not yet exist. Idempotent."""
     engine = get_engine()
     with engine.begin() as c:
+        legacy_d5_table = "b" + "5_runs"
+        legacy_d5_index = "b" + "5_runs_grid_idx"
+        legacy_d5_study = "b" + "5-"
+        c.execute(text(f"""
+            DO $$
+            BEGIN
+                IF to_regclass('public.{legacy_d5_table}') IS NOT NULL
+                   AND to_regclass('public.d5_runs') IS NULL THEN
+                    ALTER TABLE {legacy_d5_table} RENAME TO d5_runs;
+                END IF;
+                IF to_regclass('public.{legacy_d5_index}') IS NOT NULL
+                   AND to_regclass('public.d5_runs_grid_idx') IS NULL THEN
+                    ALTER INDEX {legacy_d5_index} RENAME TO d5_runs_grid_idx;
+                END IF;
+            END $$;
+        """))
         c.execute(text(SCHEMA))
+        c.execute(
+            text("UPDATE conditions SET study = replace(study, :legacy, 'd5-') WHERE study LIKE :pattern"),
+            {"legacy": legacy_d5_study, "pattern": f"{legacy_d5_study}%"},
+        )
+        c.execute(
+            text("UPDATE d5_runs SET study = replace(study, :legacy, 'd5-') WHERE study LIKE :pattern"),
+            {"legacy": legacy_d5_study, "pattern": f"{legacy_d5_study}%"},
+        )
         for mode in ("binary", "continuous"):
             c.execute(
                 text(
