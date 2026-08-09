@@ -19,8 +19,9 @@ try:
     meta = loaders.get_meta()
     if not meta.empty:
         ts = meta.iloc[0]["ingest_timestamp"]
-        studies = meta.iloc[0]["studies"]
-        st.info(f"Data as of **{ts}** · studies: {studies}")
+        codes = [c.strip() for c in str(meta.iloc[0]["studies"]).split(",")]
+        names = [loaders.study_label(c) for c in codes]
+        st.info(f"Data as of **{ts}** · models: {', '.join(names)}")
     else:
         st.warning("Database is empty. Run `python scripts/ingest.py` to populate it.")
 except Exception as e:  # pragma: no cover
@@ -28,13 +29,16 @@ except Exception as e:  # pragma: no cover
     st.stop()
 
 st.markdown(
-    """
+    r"""
 Use the sidebar pages to explore the simulation results:
 
-- **Heatmap (B1–B3)** — the central paradox: P(Expert) over evidence strength
-  (mu_E) and asymmetric penalty (c_pen), plus marginal curves.
-- **Trajectory Explorer** — trial-by-trial trust, accuracy, and choice
-  probability for a selected condition.
+- **Base Model** — expert fragility, difficulty effects, and cognitive-cost
+  effects.
+- **Memory Model** — source-memory parameter landscape and hysteresis.
+- **Graded-Evaluation Model** — continuous-evaluation parameter landscape and
+  hysteresis.
+- **Polarization Extension** — echo-chamber bifurcation over the
+  landscape-clustering × peer-correlation grid (base model).
 - **Live Simulator** — run a single simulation with new parameters on the fly.
 """
 )

@@ -24,7 +24,11 @@ def engine():
 
 def test_schema_tables_exist(engine):
     with engine.connect() as c:
-        for t in ("conditions", "runs", "trials", "ingest_meta"):
+        for t in (
+            "conditions", "runs", "trials", "base_cost_runs", "base_error_traces",
+            "extension_condition_aggregates", "extension_trajectories", "b5_runs",
+            "hysteresis", "hysteresis_trajectories", "ingest_meta",
+        ):
             row = c.exec_driver_sql(
                 "SELECT to_regclass('public." + t + "')"
             ).fetchone()
@@ -41,6 +45,12 @@ def test_heatmap_shape(engine):
     assert df.shape == (8, 8)
 
 
+def test_base_heatmap_cells(engine):
+    df = loaders.base_heatmap_cells("full")
+    assert len(df) == 64
+    assert {"delta_acc", "is_paradox"}.issubset(df.columns)
+
+
 def test_marginal(engine):
     m = loaders.marginal_data("1", "full", "binary", "stationary", fixed={"mu_e": 0.65})
     assert len(m) == 8
@@ -53,3 +63,70 @@ def test_condition_id_and_trajectory(engine):
     if t.empty:
         pytest.skip("trial-level data not loaded (run ingest without --skip-trials)")
     assert "mean_p_expert" in t.columns
+    assert "n_runs" in t.columns
+
+
+def test_n_runs_populated(engine):
+    n = loaders.condition_n_runs("1", "full", "binary", "stationary", 0.65, 6.0)
+    assert n == 1000
+
+
+def test_study23_heatmap(engine):
+    df = loaders.study23_heatmap_data("2", "full", "binary", "cyclic")
+    assert not df.empty
+    assert df.shape[0] == 8  # 8 c_pen levels
+
+
+def test_extension_heatmap_cells(engine):
+    df = loaders.extension_heatmap_cells(
+        "2", "full", "cyclic", x_var="mu_e", y_var="c_pen",
+        fixed={"expert_inertia_divisor": 2.0}, steady=True,
+    )
+    assert not df.empty
+    assert df["x"].nunique() == 8
+    assert df["y"].nunique() == 8
+    assert {"delta_acc", "is_paradox"}.issubset(df.columns)
+
+
+def test_extension_trajectory_data(engine):
+    df = loaders.extension_trajectory_data("2", "full", "cyclic", 0.65, 2.0, 10.0)
+    assert not df.empty
+    assert df["trial"].max() == 100
+    assert df["n_runs"].iloc[0] == 500
+    assert {"mean_p_expert", "mean_trust_expert", "mean_acc_expert"}.issubset(df.columns)
+
+
+def test_b5_runs(engine):
+    df = loaders.b5_runs_data("b5-1", "partial")
+    assert not df.empty
+    assert "value" in df.columns
+
+
+def test_hysteresis(engine):
+    df = loaders.hysteresis_data("2", "full")
+    assert not df.empty
+    assert "init_condition" in df.columns
+
+
+def test_base_b2_b3_error_trace(engine):
+    b2 = loaders.base_difficulty_data("full")
+    b3 = loaders.base_cost_data("full")
+    err = loaders.base_error_trace_data("full")
+    assert b2["mu_e"].nunique() == 8
+    assert b3["cost_sum"].nunique() == 6
+    assert set(err["source"].unique()) == {"Expert", "Peers"}
+
+
+def test_dynamic_base_condition_error_trace(engine):
+    cid = loaders.condition_id("1", "full", "binary", "stationary", 0.65, 6.0)
+    err = loaders.base_condition_error_trace_data(cid, window=5, max_events_per_source=10)
+    assert not err.empty
+    assert set(err["source"].unique()).issubset({"Expert", "Peers"})
+    assert err["offset"].min() >= -5
+    assert err["offset"].max() <= 5
+
+
+def test_hysteresis_trajectory(engine):
+    df = loaders.hysteresis_trajectory_data("2", "full", "cyclic")
+    assert not df.empty
+    assert df["init_condition"].nunique() == 2

@@ -3,9 +3,10 @@
 Interactive companion dashboard for *Why Even Accurate Experts Lose Trust:
 A Multi-Agent Reinforcement Learning Model*.
 
-A Streamlit app that lets you explore the simulation data (heatmaps, marginal
-curves, trial trajectories) and run single simulations live. The app reads from
-a PostgreSQL database; the data is populated by a one-shot ingest script.
+A Streamlit app that lets you explore the simulation data (paper-aligned
+heatmaps, exploratory metric views, marginal curves, trial trajectories) and run
+single simulations live. The app reads from a PostgreSQL database; the data is
+populated by a one-shot ingest script.
 
 ## Architecture
 
@@ -74,8 +75,9 @@ see a partial or stale database. Each run records an `ingest_meta` row
 streamlit run app.py
 ```
 
-Open the printed URL (default `http://localhost:8501`). Edits to any file in
-`pages/`, `dashboard/`, or `app.py` hot-reload on save.
+Open the printed URL (default `http://localhost:8501`). Edits to files in
+`pages/` and `app.py` hot-reload on save. After editing files in `dashboard/`,
+restart Streamlit so Python reloads the helper package.
 
 ## Run the tests
 
@@ -88,12 +90,16 @@ trial-level data isn't loaded).
 
 ## Development loop
 
-- Edit a page in `pages/` or code in `dashboard/` → Streamlit hot-reloads →
-  check it in the browser.
+- Edit a page in `pages/` or `app.py` → Streamlit hot-reloads → check it in the
+  browser.
+- Edit code in `dashboard/` → restart `streamlit run app.py` before checking the
+  browser. Streamlit reruns page files, but it does not reliably reload already
+  imported helper modules.
 - When you change the data pipeline, edit `scripts/ingest.py`, re-run it, and
   the app reflects the new data on the next interaction.
-- Use `--skip-trials` for fast iteration (heatmap + marginal pages only); run
-  a full ingest (with trial-level data) when testing the Trajectory Explorer.
+- Use `--skip-trials` for fast iteration (heatmap + marginal pages only); run a
+  full ingest (with trial-level data) when testing folded trajectory sections on
+  the Base Model, Memory Model, and Graded-Evaluation Model pages.
 
 ## Deploy to Hugging Face Spaces
 
@@ -104,8 +110,11 @@ trial-level data isn't loaded).
 
 ## Notes
 
-- The heatmap page uses Study 1 (binary, stationary) data. Studies 2/3
-  collapse over `mu_E`, so their heatmaps degenerate; use the marginal curves
-  and trajectory explorer for those.
-- Trial-level data is only loaded for Study 1 by default (`--skip-trials` skips
-  it). The trajectory explorer needs trial data.
+- The Base Model page uses binary, stationary base-model data for the main B1
+  heatmap and folds selected-condition trajectories into the same page.
+- The Memory and Graded-Evaluation pages keep the main paper-style heatmaps
+  fixed to `p(Expert)`; trust and accuracy heatmaps are available in exploratory
+  expanders.
+- Trial-level data is loaded for the base model by default; `--skip-trials`
+  skips it. Extension trajectory panels use `extension_trajectories` loaded by a
+  full extension ingest.

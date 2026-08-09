@@ -10,8 +10,8 @@ Behaviour
 * Reads sources from the analysis repo's data directory (DATA_DIR env or
   --data-dir). By default only the pre-aggregated JSON files and small summary
   CSVs are read for the `conditions` and `runs` tables; trial-level data is
-  loaded for `trials` from the Study 1 multi-condition CSVs (use --skip-trials
-  to leave `trials` empty, which is fine for the heatmap pages).
+  loaded for `trials` from the base-model multi-condition CSVs (use
+  --skip-trials to leave `trials` empty, which is fine for the heatmap pages).
 * Atomic reset-and-refill: everything is loaded into `_staging_*` tables,
   then in a single transaction the live tables are truncated and repopulated
   from staging, and staging is dropped. Readers never observe a partial DB.
@@ -31,6 +31,7 @@ import json
 import sys
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
 # Allow running as a plain script from the repo root.
@@ -68,6 +69,7 @@ def _load_json(pub: Path, name: str) -> dict:
 # conditions (aggregates)
 # --------------------------------------------------------------------------
 def _build_study1_conditions(d: dict) -> pd.DataFrame:
+    n_runs = d.get("n_repetitions")
     rows = []
     for key, v in d.get("conditions", {}).items():
         rows.append(
@@ -81,6 +83,7 @@ def _build_study1_conditions(d: dict) -> pd.DataFrame:
                 "expert_inertia_divisor": None,
                 "clustering": 0.0,
                 "rho_peers": 0.0,
+                "n_runs": n_runs,
                 "mean_p_expert": v.get("mean_p_expert"),
                 "sd_p_expert": v.get("sd_p_expert"),
                 "mean_acc_expert": v.get("mean_acc_expert"),
@@ -133,6 +136,7 @@ def _build_study1_conditions(d: dict) -> pd.DataFrame:
 
 
 def _build_study23_conditions(d: dict, study: str, mode: str) -> pd.DataFrame:
+    n_runs = d.get("n_repetitions_sweep")
     rows = []
     for key, v in d.get("conditions", {}).items():
         rows.append(
@@ -146,6 +150,7 @@ def _build_study23_conditions(d: dict, study: str, mode: str) -> pd.DataFrame:
                 "expert_inertia_divisor": v.get("expert_inertia_divisor"),
                 "clustering": 0.0,
                 "rho_peers": 0.0,
+                "n_runs": n_runs,
                 "mean_p_expert": v.get("mean_p_expert"),
                 "sd_p_expert": v.get("sd_p_expert"),
                 "mean_acc_expert": v.get("mean_acc_expert"),
@@ -228,11 +233,17 @@ def _build_conditions(studies: list[str], pub: Path) -> pd.DataFrame:
     df.columns = [c.lower() for c in df.columns]
     if "n_runs" in df.columns:
         df["n_runs"] = pd.to_numeric(df["n_runs"], errors="coerce").astype("Int64")
+    # Deduplicate on the schema's unique key. The b5-1 rows are added both from
+    # study_1.json's own b5 block and from the study-1 builder, so drop any
+    # exact duplicates to keep the count consistent with the unique constraint.
+    key = ["study", "evaluation_mode", "regime", "feedback_mode", "mu_e", "c_pen",
+           "expert_inertia_divisor", "clustering", "rho_peers"]
+    df = df.drop_duplicates(subset=key, keep="first")
     return df
 
 
 # --------------------------------------------------------------------------
-# runs (per-run means) for Study 1 from the multi-condition CSVs
+# runs (per-run means) for the base model from the multi-condition CSVs
 # --------------------------------------------------------------------------
 _PER_RUN_COLS = {
     "mean_p_expert": "p_expert",
@@ -283,7 +294,7 @@ def _build_runs_study1(raw: Path) -> pd.DataFrame:
 
 
 # --------------------------------------------------------------------------
-# trials (trial-level) for Study 1
+# trials (trial-level) for the base model
 # --------------------------------------------------------------------------
 _TRIAL_COLS = {
     "p_expert": "p_expert",
@@ -320,6 +331,346 @@ def _build_trials_study1(raw: Path) -> pd.DataFrame:
     if not frames:
         return pd.DataFrame()
     return pd.concat(frames, ignore_index=True)
+
+
+def _build_base_cost_runs(raw: Path) -> pd.DataFrame:
+    """Base-model cognitive-cost sweep (B3), one row per run x cost."""
+    p = raw / "basemodel" / "df_b3.csv"
+    if not p.exists():
+        print(f"  [skip] {p} not found")
+        return pd.DataFrame()
+    print(f"  reading {p} (base cost sweep)...")
+    df = pd.read_csv(p)
+    df.columns = [c.lower() for c in df.columns]
+    return df[[
+        "feedback_mode", "run_id", "cost_w_n", "cost_w_var", "cost_sum",
+        "mean_p_expert", "mean_acc_expert", "mean_acc_peers",
+    ]]
+
+
+def _build_base_error_traces(raw: Path) -> pd.DataFrame:
+    """Base-model error-locked trust traces (B1)."""
+    p = raw / "basemodel" / "df_b1_details.csv"
+    if not p.exists():
+        print(f"  [skip] {p} not found")
+        return pd.DataFrame()
+    print(f"  reading {p} (base error-locked traces)...")
+    df = pd.read_csv(p)
+    df.columns = [c.lower() for c in df.columns]
+    df = df.rename(columns={"offset": "trial_offset"})
+    return df[[
+        "feedback_mode", "run_id", "event_iter", "trial_offset", "source",
+        "trust", "baseline", "trust_norm",
+    ]]
+
+
+def _build_extension_condition_aggregates(raw: Path) -> pd.DataFrame:
+    """Condition-level extension aggregates preserving mu_E x d_T x c_pen.
+
+    Reads parquet chunks for binary/continuous and stationary/cyclic regimes,
+    aggregates first to run level (full range and second half), then to condition
+    level. This is the data needed for the paper's three extension heatmaps.
+    """
+    frames = []
+    for evaluation_mode, study in (("binary", "2"), ("continuous", "3")):
+        for regime in ("stationary", "cyclic"):
+            chunks_dir = raw / "extensions" / f"sweep_chunks_{evaluation_mode}_{regime}"
+            files = sorted(chunks_dir.glob("chunk_*.parquet"))
+            if not files:
+                print(f"  [skip] no chunks in {chunks_dir}")
+                continue
+            print(f"  reading {chunks_dir} ({len(files)} chunks; extension aggregates)...")
+            run_parts = []
+            base_cols = [
+                "trial", "mu_E_init", "expert_inertia_divisor", "c_pen",
+                "feedback_mode", "run_id", "p_expert", "trust_expert", "trust_peers",
+            ]
+            if evaluation_mode == "binary":
+                metric_cols = ["correct_expert", "correct_peers"]
+            else:
+                metric_cols = [
+                    "correct_expert_bin", "correct_peers_bin",
+                    "correct_expert_cont", "correct_peers_cont",
+                ]
+            usecols = base_cols + metric_cols
+            for f in files:
+                chunk = pd.read_parquet(f, columns=usecols)
+                cutoff = int(chunk["trial"].max()) // STEADY_STATE_DIVISOR
+                keys = ["mu_E_init", "expert_inertia_divisor", "c_pen", "feedback_mode", "run_id"]
+                agg_map = {
+                    "p_expert": "mean",
+                    "trust_expert": "mean",
+                    "trust_peers": "mean",
+                }
+                if evaluation_mode == "binary":
+                    agg_map.update({"correct_expert": "mean", "correct_peers": "mean"})
+                else:
+                    agg_map.update({
+                        "correct_expert_bin": "mean",
+                        "correct_peers_bin": "mean",
+                        "correct_expert_cont": "mean",
+                        "correct_peers_cont": "mean",
+                    })
+                full = chunk.groupby(keys).agg(agg_map).reset_index()
+                full = full.rename(columns={
+                    "p_expert": "mean_p_expert",
+                    "trust_expert": "mean_trust_expert",
+                    "trust_peers": "mean_trust_peers",
+                    "correct_expert": "mean_acc_expert",
+                    "correct_peers": "mean_acc_peers",
+                    "correct_expert_bin": "mean_acc_expert",
+                    "correct_peers_bin": "mean_acc_peers",
+                    "correct_expert_cont": "mean_acc_expert_cont",
+                    "correct_peers_cont": "mean_acc_peers_cont",
+                })
+                half_chunk = chunk[chunk["trial"] > cutoff]
+                half = half_chunk.groupby(keys).agg(agg_map).reset_index()
+                half = half.rename(columns={
+                    "p_expert": "mean_p_expert_ss",
+                    "trust_expert": "mean_trust_expert_ss",
+                    "trust_peers": "mean_trust_peers_ss",
+                    "correct_expert": "mean_acc_expert_ss",
+                    "correct_peers": "mean_acc_peers_ss",
+                    "correct_expert_bin": "mean_acc_expert_ss",
+                    "correct_peers_bin": "mean_acc_peers_ss",
+                    "correct_expert_cont": "mean_acc_expert_cont_ss",
+                    "correct_peers_cont": "mean_acc_peers_cont_ss",
+                })
+                run_parts.append(full.merge(half, on=keys, how="left"))
+                del chunk, half_chunk, full, half
+            if not run_parts:
+                continue
+            runs = pd.concat(run_parts, ignore_index=True)
+            cond_keys = ["mu_E_init", "expert_inertia_divisor", "c_pen", "feedback_mode"]
+            agg_cols = [c for c in runs.columns if c.startswith("mean_")]
+            agg_spec = {c: "mean" for c in agg_cols}
+            agg_spec["run_id"] = "nunique"
+            cond = runs.groupby(cond_keys).agg(agg_spec).reset_index()
+            cond = cond.rename(columns={"run_id": "n_runs", "mu_E_init": "mu_e"})
+            # Add SDs across run-level p(Expert) means for uncertainty/inspection.
+            sd = runs.groupby(cond_keys).agg(
+                sd_p_expert=("mean_p_expert", "std"),
+                sd_p_expert_ss=("mean_p_expert_ss", "std"),
+            ).reset_index().rename(columns={"mu_E_init": "mu_e"})
+            cond = cond.merge(sd, on=["mu_e", "expert_inertia_divisor", "c_pen", "feedback_mode"], how="left")
+            cond["study"] = study
+            cond["evaluation_mode"] = evaluation_mode
+            cond["regime"] = regime
+            cond["delta_acc"] = cond["mean_acc_expert"] - cond["mean_acc_peers"]
+            cond["delta_acc_ss"] = cond["mean_acc_expert_ss"] - cond["mean_acc_peers_ss"]
+            cond["is_paradox"] = (cond["delta_acc"] > 0) & (cond["mean_p_expert"] < 0.5)
+            cond["is_paradox_ss"] = (cond["delta_acc_ss"] > 0) & (cond["mean_p_expert_ss"] < 0.5)
+            frames.append(cond)
+            del runs, run_parts
+    if not frames:
+        return pd.DataFrame()
+    df = pd.concat(frames, ignore_index=True)
+    df.columns = [c.lower() for c in df.columns]
+    cols = [
+        "study", "evaluation_mode", "regime", "feedback_mode", "mu_e",
+        "expert_inertia_divisor", "c_pen", "n_runs", "mean_p_expert", "sd_p_expert",
+        "mean_p_expert_ss", "sd_p_expert_ss", "mean_acc_expert", "mean_acc_peers",
+        "mean_acc_expert_ss", "mean_acc_peers_ss", "mean_acc_expert_cont",
+        "mean_acc_peers_cont", "mean_acc_expert_cont_ss", "mean_acc_peers_cont_ss",
+        "mean_trust_expert", "mean_trust_peers", "mean_trust_expert_ss",
+        "mean_trust_peers_ss", "delta_acc", "delta_acc_ss", "is_paradox",
+        "is_paradox_ss",
+    ]
+    for c in cols:
+        if c not in df.columns:
+            df[c] = None
+    return df[cols]
+
+
+def _build_extension_trajectories(raw: Path) -> pd.DataFrame:
+    """Per-trial extension aggregates for selected-condition dynamics panels."""
+    frames = []
+    for evaluation_mode, study in (("binary", "2"), ("continuous", "3")):
+        for regime in ("stationary", "cyclic"):
+            chunks_dir = raw / "extensions" / f"sweep_chunks_{evaluation_mode}_{regime}"
+            files = sorted(chunks_dir.glob("chunk_*.parquet"))
+            if not files:
+                print(f"  [skip] no chunks in {chunks_dir}")
+                continue
+            print(f"  reading {chunks_dir} ({len(files)} chunks; extension trajectories)...")
+            keys = ["mu_E_init", "expert_inertia_divisor", "c_pen", "feedback_mode", "trial"]
+            if evaluation_mode == "binary":
+                metrics = {
+                    "p_expert": "p_expert",
+                    "trust_expert": "trust_expert",
+                    "trust_peers": "trust_peers",
+                    "correct_expert": "acc_expert",
+                    "correct_peers": "acc_peers",
+                }
+            else:
+                metrics = {
+                    "p_expert": "p_expert",
+                    "trust_expert": "trust_expert",
+                    "trust_peers": "trust_peers",
+                    "correct_expert_bin": "acc_expert",
+                    "correct_peers_bin": "acc_peers",
+                }
+            usecols = keys + ["run_id"] + list(metrics.keys())
+            parts = []
+            for f in files:
+                chunk = pd.read_parquet(f, columns=usecols)
+                for src, out in metrics.items():
+                    chunk[f"sum_{out}"] = chunk[src]
+                    chunk[f"sumsq_{out}"] = chunk[src] ** 2
+                agg_dict = {"run_id": "count"}
+                for out in metrics.values():
+                    agg_dict[f"sum_{out}"] = "sum"
+                    agg_dict[f"sumsq_{out}"] = "sum"
+                part = chunk.groupby(keys).agg(agg_dict).reset_index()
+                parts.append(part)
+                del chunk, part
+            if not parts:
+                continue
+            total = pd.concat(parts, ignore_index=True).groupby(keys).sum(numeric_only=True).reset_index()
+            total = total.rename(columns={"run_id": "n_runs", "mu_E_init": "mu_e"})
+            for out in sorted(set(metrics.values())):
+                n = total["n_runs"].clip(lower=1)
+                total[f"mean_{out}"] = total[f"sum_{out}"] / n
+                variance = (total[f"sumsq_{out}"] - (total[f"sum_{out}"] ** 2) / n) / (n - 1).replace(0, np.nan)
+                total[f"sd_{out}"] = np.sqrt(variance.clip(lower=0)).fillna(0.0)
+            total["study"] = study
+            total["evaluation_mode"] = evaluation_mode
+            total["regime"] = regime
+            keep = [
+                "study", "evaluation_mode", "regime", "feedback_mode", "mu_e",
+                "expert_inertia_divisor", "c_pen", "trial", "n_runs",
+                "mean_p_expert", "sd_p_expert", "mean_trust_expert", "sd_trust_expert",
+                "mean_trust_peers", "sd_trust_peers", "mean_acc_expert", "sd_acc_expert",
+                "mean_acc_peers", "sd_acc_peers",
+            ]
+            frames.append(total[keep])
+            del total, parts
+    if not frames:
+        return pd.DataFrame()
+    df = pd.concat(frames, ignore_index=True)
+    df.columns = [c.lower() for c in df.columns]
+    return df
+
+
+# --------------------------------------------------------------------------
+# b5_runs (per-run steady-state over clustering x rho grid)
+# --------------------------------------------------------------------------
+def _build_b5_runs(raw: Path, pub: Path) -> pd.DataFrame:
+    """Per-run p(Expert)/trust/accuracy over the clustering x rho grid.
+
+    Uses b5_perrun.csv (base model) plus the b5_memory/b5_graded summary CSVs
+    for the extension variants. The perrun CSV holds one row per run; the
+    summary CSVs hold per-cell aggregates, so we only load the base-model
+    perrun data here (the extension variants are covered by `conditions`).
+    """
+    p = raw / "clustering" / "b5_perrun.csv"
+    if not p.exists():
+        print(f"  [skip] {p} not found")
+        return pd.DataFrame()
+    print(f"  reading {p} (b5 per-run)...")
+    df = pd.read_csv(p)
+    df["study"] = "b5-1"
+    df["evaluation_mode"] = "binary"
+    df.columns = [c.lower() for c in df.columns]
+    return df[["study", "evaluation_mode", "feedback_mode", "clustering",
+               "rho_peers", "run_id", "p_expert", "trust_expert",
+               "trust_peers", "acc_expert", "acc_peers"]]
+
+
+# --------------------------------------------------------------------------
+# hysteresis (baseline vs post-collapse, Studies 2/3)
+# --------------------------------------------------------------------------
+def _build_hysteresis(pub: Path) -> pd.DataFrame:
+    rows = []
+    for s, fname, mode in (("2", "study_2.json", "binary"),
+                           ("3", "study_3.json", "continuous")):
+        d = _load_json(pub, f"extensions/{fname}")
+        if not d:
+            continue
+        for key, v in d.get("hysteresis", {}).items():
+            if not isinstance(v, dict):
+                continue
+            rows.append(
+                {
+                    "study": s,
+                    "evaluation_mode": mode,
+                    "regime": "cyclic",
+                    "feedback_mode": v.get("feedback_mode"),
+                    "init_condition": v.get("init_condition"),
+                    "mean_p_expert_ss": v.get("mean_p_expert_ss"),
+                    "mean_trust_expert_ss": v.get("mean_trust_expert_ss"),
+                    "mean_trust_peers_ss": v.get("mean_trust_peers_ss"),
+                }
+            )
+        for fb, v in d.get("hysteresis_gap", {}).items():
+            if not isinstance(v, dict):
+                continue
+            rows.append(
+                {
+                    "study": s,
+                    "evaluation_mode": mode,
+                    "regime": "cyclic",
+                    "feedback_mode": fb,
+                    "init_condition": "gap",
+                    "p_expert_gap_ss": v.get("p_expert_gap_ss"),
+                    "trust_expert_gap_ss": v.get("trust_expert_gap_ss"),
+                }
+            )
+    if not rows:
+        return pd.DataFrame()
+    df = pd.DataFrame(rows)
+    df.columns = [c.lower() for c in df.columns]
+    return df
+
+
+def _build_hysteresis_trajectories(raw: Path) -> pd.DataFrame:
+    """Per-trial hysteresis means/SDs from df_ext_hyst.csv.
+
+    This mirrors the paper's hysteresis panel: baseline and post-collapse
+    p(Expert) trajectories, with 95% CIs derived from SD / sqrt(n_runs).
+    """
+    p = raw / "extensions" / "df_ext_hyst.csv"
+    if not p.exists():
+        print(f"  [skip] {p} not found")
+        return pd.DataFrame()
+    print(f"  reading {p} (hysteresis trajectories)...")
+    usecols = [
+        "evaluation_mode",
+        "regime",
+        "feedback_mode",
+        "init_condition",
+        "trial",
+        "run_id",
+        "mu_E",
+        "c_pen",
+        "expert_inertia_divisor",
+        "p_expert",
+        "trust_expert",
+        "trust_peers",
+    ]
+    df = pd.read_csv(p, usecols=usecols)
+    df["study"] = df["evaluation_mode"].map({"binary": "2", "continuous": "3"})
+    grouped = (
+        df.groupby(
+            ["study", "evaluation_mode", "regime", "feedback_mode", "init_condition", "trial"],
+            dropna=False,
+        )
+        .agg(
+            n_runs=("run_id", "nunique"),
+            c_pen=("c_pen", "first"),
+            expert_inertia_divisor=("expert_inertia_divisor", "first"),
+            mu_e=("mu_E", "first"),
+            mean_p_expert=("p_expert", "mean"),
+            sd_p_expert=("p_expert", "std"),
+            mean_trust_expert=("trust_expert", "mean"),
+            sd_trust_expert=("trust_expert", "std"),
+            mean_trust_peers=("trust_peers", "mean"),
+            sd_trust_peers=("trust_peers", "std"),
+        )
+        .reset_index()
+    )
+    grouped.columns = [c.lower() for c in grouped.columns]
+    return grouped
 
 
 # --------------------------------------------------------------------------
@@ -368,14 +719,46 @@ def run(args) -> None:
 
     runs = pd.DataFrame()
     trials = pd.DataFrame()
+    base_cost_runs = pd.DataFrame()
+    base_error_traces = pd.DataFrame()
     if "1" in studies:
         runs = _build_runs_study1(raw)
         row_counts["runs"] = len(runs)
         print(f"runs: {len(runs)} rows")
+        base_cost_runs = _build_base_cost_runs(raw)
+        row_counts["base_cost_runs"] = len(base_cost_runs)
+        print(f"base_cost_runs: {len(base_cost_runs)} rows")
+        base_error_traces = _build_base_error_traces(raw)
+        row_counts["base_error_traces"] = len(base_error_traces)
+        print(f"base_error_traces: {len(base_error_traces)} rows")
         if not args.skip_trials:
             trials = _build_trials_study1(raw)
             row_counts["trials"] = len(trials)
             print(f"trials: {len(trials)} rows")
+
+    b5_runs = pd.DataFrame()
+    if "b5" in studies or "1" in studies:
+        b5_runs = _build_b5_runs(raw, pub)
+        row_counts["b5_runs"] = len(b5_runs)
+        print(f"b5_runs: {len(b5_runs)} rows")
+
+    hysteresis = pd.DataFrame()
+    hysteresis_trajectories = pd.DataFrame()
+    extension_condition_aggregates = pd.DataFrame()
+    extension_trajectories = pd.DataFrame()
+    if "2" in studies or "3" in studies:
+        extension_condition_aggregates = _build_extension_condition_aggregates(raw)
+        row_counts["extension_condition_aggregates"] = len(extension_condition_aggregates)
+        print(f"extension_condition_aggregates: {len(extension_condition_aggregates)} rows")
+        extension_trajectories = _build_extension_trajectories(raw)
+        row_counts["extension_trajectories"] = len(extension_trajectories)
+        print(f"extension_trajectories: {len(extension_trajectories)} rows")
+        hysteresis = _build_hysteresis(pub)
+        row_counts["hysteresis"] = len(hysteresis)
+        print(f"hysteresis: {len(hysteresis)} rows")
+        hysteresis_trajectories = _build_hysteresis_trajectories(raw)
+        row_counts["hysteresis_trajectories"] = len(hysteresis_trajectories)
+        print(f"hysteresis_trajectories: {len(hysteresis_trajectories)} rows")
 
     if args.dry_run:
         print("\n[DRY RUN] no changes written.")
@@ -389,6 +772,13 @@ def run(args) -> None:
             cur.execute("DROP TABLE IF EXISTS _staging_conditions")
             cur.execute("DROP TABLE IF EXISTS _staging_runs")
             cur.execute("DROP TABLE IF EXISTS _staging_trials")
+            cur.execute("DROP TABLE IF EXISTS _staging_base_cost_runs")
+            cur.execute("DROP TABLE IF EXISTS _staging_base_error_traces")
+            cur.execute("DROP TABLE IF EXISTS _staging_extension_condition_aggregates")
+            cur.execute("DROP TABLE IF EXISTS _staging_extension_trajectories")
+            cur.execute("DROP TABLE IF EXISTS _staging_b5_runs")
+            cur.execute("DROP TABLE IF EXISTS _staging_hysteresis")
+            cur.execute("DROP TABLE IF EXISTS _staging_hysteresis_trajectories")
         conn.commit()
 
         # staging tables mirror live ones (no FKs between staging)
@@ -404,6 +794,34 @@ def run(args) -> None:
             cur.execute(
                 "CREATE TABLE _staging_trials (LIKE trials "
                 "INCLUDING DEFAULTS INCLUDING IDENTITY)"
+            )
+            cur.execute(
+                "CREATE TABLE _staging_base_cost_runs (LIKE base_cost_runs "
+                "INCLUDING DEFAULTS INCLUDING IDENTITY)"
+            )
+            cur.execute(
+                "CREATE TABLE _staging_base_error_traces (LIKE base_error_traces "
+                "INCLUDING DEFAULTS INCLUDING IDENTITY)"
+            )
+            cur.execute(
+                "CREATE TABLE _staging_extension_condition_aggregates "
+                "(LIKE extension_condition_aggregates INCLUDING DEFAULTS INCLUDING IDENTITY)"
+            )
+            cur.execute(
+                "CREATE TABLE _staging_extension_trajectories "
+                "(LIKE extension_trajectories INCLUDING DEFAULTS INCLUDING IDENTITY)"
+            )
+            cur.execute(
+                "CREATE TABLE _staging_b5_runs (LIKE b5_runs "
+                "INCLUDING DEFAULTS INCLUDING IDENTITY)"
+            )
+            cur.execute(
+                "CREATE TABLE _staging_hysteresis (LIKE hysteresis "
+                "INCLUDING DEFAULTS INCLUDING IDENTITY)"
+            )
+            cur.execute(
+                "CREATE TABLE _staging_hysteresis_trajectories "
+                "(LIKE hysteresis_trajectories INCLUDING DEFAULTS INCLUDING IDENTITY)"
             )
         conn.commit()
 
@@ -443,20 +861,60 @@ def run(args) -> None:
             trials_s = trials_s.rename(columns={"id": "condition_id"})
             trials_s = trials_s.dropna(subset=["condition_id"])
             trials_s["condition_id"] = trials_s["condition_id"].astype(int)
-            trials_s = trials_s.drop(columns=merge_keys)
+            # evaluation_mode is a real (NOT NULL partition-key) column of the
+            # trials table and must be kept; the other merge keys are not
+            # columns of trials and should be dropped.
+            trials_s = trials_s.drop(
+                columns=[k for k in merge_keys if k != "evaluation_mode"]
+            )
             _insert_copy(conn, "_staging_trials", trials_s)
+
+        if not base_cost_runs.empty:
+            _insert_copy(conn, "_staging_base_cost_runs", base_cost_runs)
+        if not base_error_traces.empty:
+            _insert_copy(conn, "_staging_base_error_traces", base_error_traces)
+        if not extension_condition_aggregates.empty:
+            _insert_copy(conn, "_staging_extension_condition_aggregates", extension_condition_aggregates)
+        if not extension_trajectories.empty:
+            _insert_copy(conn, "_staging_extension_trajectories", extension_trajectories)
+
+        if not b5_runs.empty:
+            _insert_copy(conn, "_staging_b5_runs", b5_runs)
+        if not hysteresis.empty:
+            _insert_copy(conn, "_staging_hysteresis", hysteresis)
+        if not hysteresis_trajectories.empty:
+            _insert_copy(conn, "_staging_hysteresis_trajectories", hysteresis_trajectories)
 
         conn.commit()
 
         # ---- swap in one transaction ----
         with conn.cursor() as cur:
-            cur.execute("TRUNCATE TABLE conditions, runs, trials RESTART IDENTITY CASCADE")
+            cur.execute(
+                "TRUNCATE TABLE conditions, runs, trials, b5_runs, hysteresis, "
+                "hysteresis_trajectories, base_cost_runs, base_error_traces, "
+                "extension_condition_aggregates, extension_trajectories "
+                "RESTART IDENTITY CASCADE"
+            )
             cur.execute("INSERT INTO conditions SELECT * FROM _staging_conditions")
             cur.execute("INSERT INTO runs SELECT * FROM _staging_runs")
             cur.execute("INSERT INTO trials SELECT * FROM _staging_trials")
+            cur.execute("INSERT INTO base_cost_runs SELECT * FROM _staging_base_cost_runs")
+            cur.execute("INSERT INTO base_error_traces SELECT * FROM _staging_base_error_traces")
+            cur.execute("INSERT INTO extension_condition_aggregates SELECT * FROM _staging_extension_condition_aggregates")
+            cur.execute("INSERT INTO extension_trajectories SELECT * FROM _staging_extension_trajectories")
+            cur.execute("INSERT INTO b5_runs SELECT * FROM _staging_b5_runs")
+            cur.execute("INSERT INTO hysteresis SELECT * FROM _staging_hysteresis")
+            cur.execute("INSERT INTO hysteresis_trajectories SELECT * FROM _staging_hysteresis_trajectories")
             cur.execute("DROP TABLE IF EXISTS _staging_conditions")
             cur.execute("DROP TABLE IF EXISTS _staging_runs")
             cur.execute("DROP TABLE IF EXISTS _staging_trials")
+            cur.execute("DROP TABLE IF EXISTS _staging_base_cost_runs")
+            cur.execute("DROP TABLE IF EXISTS _staging_base_error_traces")
+            cur.execute("DROP TABLE IF EXISTS _staging_extension_condition_aggregates")
+            cur.execute("DROP TABLE IF EXISTS _staging_extension_trajectories")
+            cur.execute("DROP TABLE IF EXISTS _staging_b5_runs")
+            cur.execute("DROP TABLE IF EXISTS _staging_hysteresis")
+            cur.execute("DROP TABLE IF EXISTS _staging_hysteresis_trajectories")
             # metadata
             import subprocess
             sha = ""
