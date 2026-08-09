@@ -6,7 +6,6 @@ from dashboard.ui import metadata_box
 REP_MU = 0.65
 REP_CPEN = 6.0
 
-st.set_page_config(page_title="Base Model Results", layout="wide")
 st.title("Base Model Results: Expert Fragility, Difficulty, and Cost")
 
 if "1" not in loaders.available_studies():
@@ -16,7 +15,8 @@ if "1" not in loaders.available_studies():
 with st.sidebar:
     st.header("Controls")
     feedback = st.selectbox("Feedback mode", ["full", "partial"])
-    steady = st.checkbox("Use steady-state aggregates (second half of trials)", value=True)
+    steady = st.checkbox("Aggregate metric means over steady state (second half of trials)", value=True)
+    st.caption("Affects only condition-level metric aggregation; trajectory panels still show full trial series.")
 
 heat = loaders.base_heatmap_cells(feedback, steady=steady)
 if heat.empty:

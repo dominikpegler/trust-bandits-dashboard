@@ -38,6 +38,11 @@ reruns page scripts but does not reliably reload already-imported helper
 modules. This was the cause of earlier =AttributeError= reports for newly added
 loader functions.
 
+The app uses explicit =st.navigation= in =app.py= so the entrypoint appears in
+the sidebar as =Trust-Bandits Explorer= rather than Streamlit's default filename
+label. Keep new pages registered in =app.py=; page scripts should not call
+=st.set_page_config()= directly.
+
 * Ingest Workflow
 
 The ingest script performs an atomic reset-and-refill via staging tables:

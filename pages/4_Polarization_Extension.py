@@ -4,7 +4,6 @@ import streamlit as st
 from dashboard import loaders, plotting
 from dashboard.ui import metadata_box
 
-st.set_page_config(page_title="Polarization Bifurcation", layout="wide")
 st.title("Polarization Extension: Echo-Chamber Bifurcation")
 
 st.markdown(

@@ -2,7 +2,6 @@ import streamlit as st
 
 from dashboard import live_sim, plotting
 
-st.set_page_config(page_title="Live Simulator", layout="wide")
 st.title("Live Simulator")
 st.caption("Run a single simulation with new parameters. Results are not stored.")
 

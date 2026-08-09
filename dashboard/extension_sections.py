@@ -95,7 +95,8 @@ fixed $c_{{\mathrm{{pen}}}}$.
     with st.sidebar:
         st.header("Controls")
         feedback = st.selectbox("Feedback mode", ["full", "partial"])
-        steady = st.checkbox("Steady-state (second half of trials)", value=True)
+        steady = st.checkbox("Aggregate metric means over steady state (second half of trials)", value=True)
+        st.caption("Affects only condition-level metric aggregation; trajectory panels still show full trial series.")
         levels = loaders.extension_levels(study, "cyclic", feedback)
         st.header("Selected condition")
         selected_mu = st.selectbox("Evidence strength ($\\mu_E$)", levels["mu_e"],
