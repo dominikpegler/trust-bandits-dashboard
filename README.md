@@ -59,6 +59,11 @@ Or, equivalently, the individual `AZURE_PG_*` variables (see
 ## Populate the database
 
 ```bash
+export DATABASE_URL='postgresql://USER:PASSWORD@SERVER.postgres.database.azure.com:5432/DBNAME?sslmode=require'
+export DATA_DIR="PATH/TO//trust-bandits-analysis"
+```
+
+```bash
 python scripts/ingest.py --studies 1 2 3 d5   # reset-and-refill, all studies
 python scripts/ingest.py --studies 1 --skip-trials   # faster, no trial-level
 python scripts/ingest.py --dry-run            # show what would be ingested
