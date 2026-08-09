@@ -1,7 +1,7 @@
 import streamlit as st
 
 from dashboard import loaders, plotting
-from dashboard.ui import metadata_box
+from dashboard.ui import help_text, metadata_box
 
 REP_MU = 0.65
 REP_CPEN = 6.0
@@ -14,8 +14,12 @@ if "1" not in loaders.available_studies():
 
 with st.sidebar:
     st.header("Controls")
-    feedback = st.selectbox("Feedback mode", ["full", "partial"])
-    steady = st.checkbox("Aggregate metric means over steady state (second half of trials)", value=True)
+    feedback = st.selectbox("Feedback mode", ["full", "partial"], help=help_text("feedback"))
+    steady = st.checkbox(
+        "Aggregate metric means over steady state (second half of trials)",
+        value=True,
+        help=help_text("aggregate_steady"),
+    )
     st.caption("Affects only condition-level metric aggregation; trajectory panels still show full trial series.")
 
 heat = loaders.base_heatmap_cells(feedback, steady=steady)
@@ -30,11 +34,13 @@ with st.sidebar:
     selected_mu = float(st.selectbox(
         "Evidence strength", mu_levels,
         index=mu_levels.index(REP_MU) if REP_MU in mu_levels else 0,
+        help=help_text("mu_e"),
     ))
     st.caption(r"$\mu_E$")
     selected_c_pen = float(st.selectbox(
         "Penalty", pen_levels,
         index=pen_levels.index(REP_CPEN) if REP_CPEN in pen_levels else 0,
+        help=help_text("c_pen"),
     ))
     st.caption(r"$c_{\mathrm{pen}}$")
 
@@ -48,6 +54,11 @@ metadata_box(
         ("Selected", f"μ<sub>E</sub>={selected_mu}, c<sub>pen</sub>={selected_c_pen:g}"),
         ("Fixed", "L=32, σ<sub>E</sub>=0.1, τ=0.3, α<sub>base</sub>=0.1, peers cost=(0.5, 0.25)"),
     ]
+)
+st.caption(
+    f"Fixed parameters: L is the landscape size ({help_text('landscape_size')}) · "
+    f"σ_E is evidence noise ({help_text('sigma_e')}) · τ is decision temperature ({help_text('tau')}) · "
+    f"α_base is the trust learning rate ({help_text('lr_base')}) · peers cost means {help_text('peer_cost_weights')}"
 )
 
 st.subheader("D1: Expert fragility heatmap")

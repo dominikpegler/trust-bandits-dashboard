@@ -2,7 +2,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from dashboard import loaders, plotting
-from dashboard.ui import metadata_box
+from dashboard.ui import help_text, metadata_box
 
 st.title("Polarization Extension: Echo-Chamber Bifurcation")
 
@@ -24,7 +24,7 @@ if not d5:
 with st.sidebar:
     st.header("Controls")
     st.caption("Polarization extension (base model)")
-    feedback = st.selectbox("Feedback mode", ["full", "partial"])
+    feedback = st.selectbox("Feedback mode", ["full", "partial"], help=help_text("feedback"))
 
 clust_levels, rho_levels = loaders.d5_grid_levels(d5_study)
 df = loaders.d5_runs_data(d5_study, feedback, "p_expert")
@@ -44,6 +44,10 @@ metadata_box(
         ("Aggregation", "steady-state p(Expert)"),
         ("Grid", "ρ<sub>clust</sub> × ρ<sub>peer</sub>"),
     ]
+)
+st.caption(
+    f"ρ_clust: {help_text('rho_clust')} ρ_peer: {help_text('rho_peer')} "
+    f"Bifurcation: {help_text('bifurcation')}"
 )
 fig = plotting.d5_bifurcation_figure(
     df, clust_levels, rho_levels, "p_expert",

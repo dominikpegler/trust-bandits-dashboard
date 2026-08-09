@@ -1,6 +1,7 @@
 import streamlit as st
 
 from dashboard import live_sim, plotting
+from dashboard.ui import help_text
 
 st.title("Live Simulator")
 st.caption("Run a single simulation with new parameters. Results are not stored.")
@@ -22,20 +23,41 @@ if not live_sim._HAS_TRUSTBANDITS:
 
 with st.sidebar:
     st.header("Parameters")
-    mu_E = st.slider(plotting.mathify("Evidence strength (mu_E)"), 0.5, 0.95, 0.65, 0.025)
-    c_pen = st.slider(plotting.mathify("Asymmetric penalty (c_pen)"), 1.0, 18.0, 6.0, 0.5)
-    sigma_E = st.slider(plotting.mathify("Evidence noise (sigma_E)"), 0.0, 0.3, 0.1, 0.01)
-    sigma_expert = st.slider(plotting.mathify("Expert noise (sigma_expert)"), 0.0, 0.5, 0.2, 0.01)
-    sigma_peers_multiplier = st.slider(plotting.mathify("Peers noise multiplier (sigma_peers_multiplier)"), 1.0, 4.0, 2.0, 0.1)
-    m_peers = st.slider(plotting.mathify("Number of peers (m_peers)"), 1, 10, 3)
-    f_peers = st.slider(plotting.mathify("Peers sampling fraction (f_peers)"), 0.01, 0.5, 0.0625, 0.01)
-    lr_base = st.slider(plotting.mathify("Learning rate (lr_base)"), 0.01, 0.5, 0.1, 0.01)
-    tau = st.slider(plotting.mathify("Decision temperature (tau)"), 0.05, 1.0, 0.3, 0.05)
-    w_init_expert = st.slider(plotting.mathify("Initial trust in Expert (w_init_expert)"), 0.0, 1.0, 0.5, 0.05)
-    w_init_peers = st.slider(plotting.mathify("Initial trust in Peers (w_init_peers)"), 0.0, 1.0, 0.5, 0.05)
-    feedback = st.selectbox("Feedback mode", ["full", "partial"])
-    n_trials = st.slider("Trials", 20, 200, 50, 10)
-    n_runs = st.slider("Replications", 1, 50, 1)
+    mu_E = st.slider(plotting.mathify("Evidence strength (mu_E)"), 0.5, 0.95, 0.65, 0.025, help=help_text("mu_e"))
+    c_pen = st.slider(plotting.mathify("Asymmetric penalty (c_pen)"), 1.0, 18.0, 6.0, 0.5, help=help_text("c_pen"))
+    sigma_E = st.slider(plotting.mathify("Evidence noise (sigma_E)"), 0.0, 0.3, 0.1, 0.01, help=help_text("sigma_e"))
+    sigma_expert = st.slider(plotting.mathify("Expert noise (sigma_expert)"), 0.0, 0.5, 0.2, 0.01, help=help_text("sigma_expert"))
+    sigma_peers_multiplier = st.slider(
+        plotting.mathify("Peers noise multiplier (sigma_peers_multiplier)"),
+        1.0,
+        4.0,
+        2.0,
+        0.1,
+        help=help_text("sigma_peers_multiplier"),
+    )
+    m_peers = st.slider(plotting.mathify("Number of peers (m_peers)"), 1, 10, 3, help=help_text("m_peers"))
+    f_peers = st.slider(plotting.mathify("Peers sampling fraction (f_peers)"), 0.01, 0.5, 0.0625, 0.01, help=help_text("f_peers"))
+    lr_base = st.slider(plotting.mathify("Learning rate (lr_base)"), 0.01, 0.5, 0.1, 0.01, help=help_text("lr_base"))
+    tau = st.slider(plotting.mathify("Decision temperature (tau)"), 0.05, 1.0, 0.3, 0.05, help=help_text("tau"))
+    w_init_expert = st.slider(
+        plotting.mathify("Initial trust in Expert (w_init_expert)"),
+        0.0,
+        1.0,
+        0.5,
+        0.05,
+        help=help_text("w_init_expert"),
+    )
+    w_init_peers = st.slider(
+        plotting.mathify("Initial trust in Peers (w_init_peers)"),
+        0.0,
+        1.0,
+        0.5,
+        0.05,
+        help=help_text("w_init_peers"),
+    )
+    feedback = st.selectbox("Feedback mode", ["full", "partial"], help=help_text("feedback"))
+    n_trials = st.slider("Trials", 20, 200, 50, 10, help=help_text("trials"))
+    n_runs = st.slider("Replications", 1, 50, 1, help=help_text("replications"))
     run = st.button("Run simulation")
 
 if run:

@@ -7,6 +7,7 @@ st.set_page_config(
 )
 
 from dashboard import db, loaders  # noqa: E402
+from dashboard.ui import render_glossary  # noqa: E402
 
 try:
     db.init_db()
@@ -45,6 +46,7 @@ Use the sidebar pages to explore the simulation results:
 - **Live Simulator** — run a single simulation with new parameters on the fly.
 """
     )
+    render_glossary()
 
 
 navigation = st.navigation(

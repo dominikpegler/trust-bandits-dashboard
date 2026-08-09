@@ -3,7 +3,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from . import loaders, plotting
-from .ui import metadata_box
+from .ui import help_text, metadata_box
 
 
 def _ci(sd, n_runs):
@@ -94,18 +94,38 @@ fixed $c_{{\mathrm{{pen}}}}$.
 
     with st.sidebar:
         st.header("Controls")
-        feedback = st.selectbox("Feedback mode", ["full", "partial"])
-        steady = st.checkbox("Aggregate metric means over steady state (second half of trials)", value=True)
+        feedback = st.selectbox("Feedback mode", ["full", "partial"], help=help_text("feedback"))
+        steady = st.checkbox(
+            "Aggregate metric means over steady state (second half of trials)",
+            value=True,
+            help=help_text("aggregate_steady"),
+        )
         st.caption("Affects only condition-level metric aggregation; trajectory panels still show full trial series.")
         levels = loaders.extension_levels(study, "cyclic", feedback)
         st.header("Selected condition")
-        selected_mu = st.selectbox("Evidence strength ($\\mu_E$)", levels["mu_e"],
-                                   index=levels["mu_e"].index(0.65) if 0.65 in levels["mu_e"] else 0)
-        selected_d = st.selectbox("Expert inertia ($d_T$)", levels["expert_inertia_divisor"],
-                                  index=levels["expert_inertia_divisor"].index(2.0) if 2.0 in levels["expert_inertia_divisor"] else 0)
-        selected_c_pen = st.selectbox("Penalty ($c_{\\mathrm{pen}}$)", levels["c_pen"],
-                                      index=levels["c_pen"].index(10.0) if 10.0 in levels["c_pen"] else 0)
-        hyst_regime = st.selectbox("Hysteresis regime", ["cyclic", "stationary"])
+        selected_mu = st.selectbox(
+            "Evidence strength ($\\mu_E$)",
+            levels["mu_e"],
+            index=levels["mu_e"].index(0.65) if 0.65 in levels["mu_e"] else 0,
+            help=help_text("mu_e"),
+        )
+        selected_d = st.selectbox(
+            "Expert inertia ($d_T$)",
+            levels["expert_inertia_divisor"],
+            index=levels["expert_inertia_divisor"].index(2.0) if 2.0 in levels["expert_inertia_divisor"] else 0,
+            help=help_text("d_t"),
+        )
+        selected_c_pen = st.selectbox(
+            "Penalty ($c_{\\mathrm{pen}}$)",
+            levels["c_pen"],
+            index=levels["c_pen"].index(10.0) if 10.0 in levels["c_pen"] else 0,
+            help=help_text("c_pen"),
+        )
+        hyst_regime = st.selectbox(
+            "Hysteresis regime",
+            ["cyclic", "stationary"],
+            help=f"cyclic: {help_text('cyclic_regime')} stationary: {help_text('stationary_regime')}",
+        )
 
     n_runs = loaders.condition_n_runs(
         study,
