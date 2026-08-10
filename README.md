@@ -111,6 +111,12 @@ trial-level data isn't loaded).
 The Streamlit SDK is deprecated on Hugging Face Spaces, so the app is deployed
 as a Docker container. Three hosting paths are available.
 
+> **Note:** the `Dockerfile` installs the `trustbandits` package from the
+> `dominikpegler/trust-bandits-analysis` repo as a git dependency. That repo is
+> currently **private**, so the image will only build once it is made public
+> (planned for paper publication) or a build token is supplied. Until then, use
+> Path A (Community Cloud) or build locally.
+
 ### Path A — Streamlit Community Cloud (free, for collaborators)
 
 No Dockerfile is needed; Community Cloud containerizes the app for you.

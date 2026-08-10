@@ -23,6 +23,11 @@ as a Docker container. The =Dockerfile= is production-ready: it installs the
 =trustbandits= package from the analysis repo as a git dependency (so the Live
 Simulator works in the deployed image) and runs as a non-root user.
 
+Caveat: the =trustbandits= analysis repo is currently **private**, so the
+Docker image will only build once that repo is made public (planned for paper
+publication) or a build token is supplied. Until then, use Streamlit Community
+Cloud or build locally.
+
 Three hosting paths are documented in =README.md=:
 
 - **Streamlit Community Cloud** (free) — for showing collaborators; no
