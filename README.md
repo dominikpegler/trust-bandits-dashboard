@@ -106,12 +106,44 @@ trial-level data isn't loaded).
   full ingest (with trial-level data) when testing folded trajectory sections on
   the Base Model, Memory Model, and Graded-Evaluation Model pages.
 
-## Deploy to Hugging Face Spaces
+## Deploy
 
-1. Create a Space with the **Streamlit** SDK, connected to this GitHub repo.
-2. Set the `DATABASE_URL` secret (Settings → Variables and secrets).
-3. Keep the Space **private** during development; make it public when the paper
+The Streamlit SDK is deprecated on Hugging Face Spaces, so the app is deployed
+as a Docker container. Three hosting paths are available.
+
+### Path A — Streamlit Community Cloud (free, for collaborators)
+
+No Dockerfile is needed; Community Cloud containerizes the app for you.
+
+1. Push this repo to GitHub (public or private).
+2. In [Streamlit Community Cloud](https://share.streamlit.io), click **Deploy an
+   app**, select the repo, and set the entrypoint to `app.py`.
+3. Set the `DATABASE_URL` secret (Settings → Secrets).
+4. Share the app URL with collaborators.
+
+Note: free apps sleep after a period of inactivity and wake on the next visit.
+
+### Path B — Hugging Face Spaces (requires a paid subscription)
+
+Docker Spaces require a Hugging Face **PRO** or **Team** subscription, which is
+recurring (not a one-time cost).
+
+1. Create a Space with the **Docker** SDK, connected to this GitHub repo.
+2. In the Space's `README.md`, set `sdk: docker` and `app_port: 7860`.
+3. Set the `DATABASE_URL` secret (Settings → Variables and secrets).
+4. Keep the Space **private** during development; make it public when the paper
    is submitted.
+
+### Path C — Azure (permanent, uses an existing subscription)
+
+Build the provided `Dockerfile` on Azure Container Apps or Azure App Service
+(Linux), reusing your existing Azure Database for PostgreSQL.
+
+1. Build and push the image to Azure Container Registry.
+2. Create a Container App or App Service (Linux) from that image.
+3. Set the `DATABASE_URL` environment variable to your Azure Postgres.
+4. Configure HTTPS and, if desired, restrict access while the paper is in
+   review.
 
 ## Notes
 

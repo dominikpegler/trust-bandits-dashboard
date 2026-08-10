@@ -16,6 +16,22 @@ Behavior-style labels and internal names were renamed; =db.init_db()= performs a
 compatibility migration from the previous polarization table/study keys to
 =d5_runs= / =d5-*= when opening an existing development database.
 
+* Deployment
+
+The Streamlit SDK is deprecated on Hugging Face Spaces, so the app is deployed
+as a Docker container. The =Dockerfile= is production-ready: it installs the
+=trustbandits= package from the analysis repo as a git dependency (so the Live
+Simulator works in the deployed image) and runs as a non-root user.
+
+Three hosting paths are documented in =README.md=:
+
+- **Streamlit Community Cloud** (free) — for showing collaborators; no
+  Dockerfile needed.
+- **Hugging Face Spaces** (Docker SDK) — requires a recurring PRO/Team
+  subscription.
+- **Azure** (Container Apps / App Service) — permanent hosting reusing the
+  existing Azure subscription and Postgres.
+
 * Local Development
 
 #+begin_src bash
