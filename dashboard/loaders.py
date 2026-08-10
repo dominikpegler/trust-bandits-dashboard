@@ -30,6 +30,64 @@ def study_label(code: str) -> str:
     return STUDY_LABELS.get(code, code)
 
 
+def model_meta(study: str) -> dict:
+    """Return the fixed `design` block captured at ingest time for a study."""
+    df = db.fetch_df(
+        "SELECT design FROM model_meta WHERE study = :study",
+        {"study": study},
+    )
+    if df.empty or df.iloc[0]["design"] is None:
+        return {}
+    return df.iloc[0]["design"]
+
+
+def _design_num(design: dict, key: str, default: str | None = None) -> str | None:
+    val = design.get(key)
+    if val is None:
+        return default
+    try:
+        return f"{float(val):g}"
+    except (TypeError, ValueError):
+        return str(val)
+
+
+def fixed_parameters_html(study: str, design: dict | None = None) -> str:
+    """Human-readable fixed-parameter string for a study, from its design.
+
+    Renders HTML (via <sub>) for the metadata box. Falls back to a placeholder
+    when the design block is unavailable (e.g. the database predates the
+    model_meta table).
+    """
+    design = design if design is not None else model_meta(study)
+    if not design:
+        return "n/a"
+    parts = []
+    parts.append(f"L={_design_num(design, 'world_size', '?')}")
+    parts.append(f"σ<sub>E</sub>={_design_num(design, 'sigma_E', '?')}")
+    parts.append(f"τ={_design_num(design, 'tau', '?')}")
+    parts.append(f"α<sub>base</sub>={_design_num(design, 'lr_base', '?')}")
+    if study == "1":
+        cost = design.get("peers_cost_weights")
+        if cost:
+            parts.append("peers cost=(" + ", ".join(f"{c:g}" for c in cost) + ")")
+        else:
+            parts.append("peers cost=n/a")
+    else:
+        peer = design.get("peer_alpha_src")
+        wmem = design.get("w_memory")
+        wvar = design.get("w_var")
+        decay = design.get("memory_decay_rate")
+        extra = []
+        if peer is not None:
+            extra.append(f"peer α={_design_num(design, 'peer_alpha_src')}")
+        if wmem is not None and wvar is not None:
+            extra.append(f"w<sub>mem</sub>={_design_num(design, 'w_memory')}, w<sub>var</sub>={_design_num(design, 'w_var')}")
+        if decay is not None:
+            extra.append(f"decay={_design_num(design, 'memory_decay_rate')}")
+        parts.extend(extra)
+    return ", ".join(parts)
+
+
 def available_studies() -> list[str]:
     df = db.fetch_df("SELECT DISTINCT study FROM conditions ORDER BY study")
     return df["study"].tolist()

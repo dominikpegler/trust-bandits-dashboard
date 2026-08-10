@@ -2,10 +2,12 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from dashboard import loaders, plotting
-from dashboard.ui import help_text, metadata_box
+from dashboard.loaders import fixed_parameters_html
+from dashboard.ui import help_text, metadata_box, model_description
 
-st.title("Polarization Extension: Echo-Chamber Bifurcation")
+st.title("Polarization Extension")
 
+st.markdown(model_description("d5-1"))
 st.markdown(
     "Per-run steady-state p(Expert) distributions over the landscape-clustering "
     "($\\rho_{clust}$, rows) × peer-correlation ($\\rho_{peer}$, columns) grid, "
@@ -37,16 +39,18 @@ metadata_box(
     [
         ("Model", "Base model"),
         ("Extension", "Polarization"),
-        ("Fixed", "μ<sub>E</sub>=0.65, c<sub>pen</sub>=6"),
         ("Feedback", feedback),
         ("N", f"{n_runs} runs per cell"),
         ("T", "50 trials"),
         ("Aggregation", "steady-state p(Expert)"),
         ("Grid", "ρ<sub>clust</sub> × ρ<sub>peer</sub>"),
+        ("Selected", "μ<sub>E</sub>=0.65, c<sub>pen</sub>=6"),
+        ("Fixed", fixed_parameters_html("d5-1")),
     ]
 )
 st.caption(
-    f"ρ_clust: {help_text('rho_clust')} ρ_peer: {help_text('rho_peer')} "
+    f"$\\rho_{{\\mathrm{{clust}}}}$: {help_text('rho_clust')} "
+    f"$\\rho_{{\\mathrm{{peer}}}}$: {help_text('rho_peer')} "
     f"Bifurcation: {help_text('bifurcation')}"
 )
 fig = plotting.d5_bifurcation_figure(

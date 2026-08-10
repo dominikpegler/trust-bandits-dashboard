@@ -46,6 +46,64 @@ def help_text(key: str) -> str:
     return PARAMETER_HELP[key]
 
 
+MODEL_DESCRIPTIONS = {
+    "1": (
+        r"Establishes the core mechanisms — asymmetric error penalties, "
+        r"evidence ambiguity, and peer-aggregation costs — that produce expert "
+        r"trust fragility (D1), difficulty-dependent erosion (D2), and "
+        r"cognitive-cost-sustained expert reliance (D3) in a stationary world "
+        r"with independent trials and binary recommendations."
+    ),
+    "2": (
+        r"Extends the base model by giving sources persistent internal "
+        r"estimates that update across trials and by introducing cyclic "
+        r"evidence regime shifts, testing whether institutional inertia "
+        r"combined with environmental change produces trust hysteresis (D4) "
+        r"and whether B1 persists when trials represent an evolving situation "
+        r"rather than independent questions."
+    ),
+    "3": (
+        r"Builds on the memory extension by replacing binary recommendations "
+        r"and all-or-nothing correctness scoring with continuous "
+        r"recommendations and partial-credit correctness, isolating evaluation "
+        r"granularity as the key boundary condition that buffers the "
+        r"asymmetric-penalty mechanisms underlying D1 and D4."
+    ),
+    "d5-1": (
+        r"Applied across all three model variants, this manipulation "
+        r"introduces landscape clustering ($\rho_{\mathrm{clust}}$) and "
+        r"correlated peer exposure ($\rho_{\mathrm{peer}}$) to test whether "
+        r"their joint presence — but neither alone — produces a bimodal trust "
+        r"distribution across otherwise identical societies, and whether "
+        r"graded evaluation buffers this bifurcation just as it buffers B1."
+    ),
+}
+
+
+def model_description(study: str) -> str:
+    """Return the 1-2 sentence model description for a study code."""
+    return MODEL_DESCRIPTIONS.get(study, "")
+
+
+def apply_global_style() -> None:
+    """Inject app-wide CSS.
+
+    Widens the main content column so side-by-side heatmaps (e.g. the three
+    paper-style extension slices) are not compressed into the default narrow
+    block.
+    """
+    st.markdown(
+        """
+<style>
+[data-testid="stMainBlockContainer"] .block-container {
+    max-width: 1400px !important;
+}
+</style>
+""",
+        unsafe_allow_html=True,
+    )
+
+
 def render_glossary() -> None:
     """Render a compact glossary for public-facing orientation."""
     with st.expander("Parameter and metric glossary"):

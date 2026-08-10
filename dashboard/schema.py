@@ -264,4 +264,15 @@ CREATE TABLE IF NOT EXISTS ingest_meta (
     row_counts         JSONB,
     source_checksums   JSONB
 );
+
+-- Model metadata: the fixed simulation `design` block for each study, captured
+-- at ingest time from the analysis repo's study JSON. The app reads this (not
+-- the raw data dir) so model pages can show accurate per-model fixed
+-- parameters even in deployed read-only environments.
+CREATE TABLE IF NOT EXISTS model_meta (
+    id                 BIGSERIAL PRIMARY KEY,
+    study              TEXT        NOT NULL UNIQUE,   -- 1, 2, 3, d5-1, d5-2, d5-3
+    design             JSONB       NOT NULL,
+    source             TEXT
+);
 """

@@ -70,12 +70,44 @@ def _source_block(d: dict, name: str) -> dict:
     legacy = name.replace("d5", "b" + "5")
     return d.get(name) or d.get(legacy, {})
 
-
 def _source_file(*candidates: Path) -> Path:
     for candidate in candidates:
         if candidate.exists():
             return candidate
     return candidates[0]
+
+
+def _collect_model_meta(studies: list[str], pub: Path) -> list[dict]:
+    """Capture the fixed `design` block for each study being ingested.
+
+    Returns a list of {"study", "design", "source"} dicts for model_meta.
+    Study 1 and d5-1 come from the base-model study JSON; studies 2/3 from the
+    extension study JSONs; d5-2/d5-3 inherit the design of their base model.
+    """
+    rows: list[dict] = []
+    base_json = pub / "basemodel" / "study_1.json"
+    base_d = _load_json(pub, "basemodel/study_1.json")
+    base_design = base_d.get("design", {})
+
+    for s in studies:
+        if s == "1":
+            rows.append({"study": "1", "design": base_design, "source": str(base_json)})
+        elif s == "d5-1":
+            d5_design = dict(base_design)
+            d5_design.update(_source_block(base_d, "d5"))
+            rows.append({"study": "d5-1", "design": d5_design, "source": str(base_json)})
+        elif s in ("2", "3"):
+            p = pub / "extensions" / f"study_{s}.json"
+            d = _load_json(pub, f"extensions/study_{s}.json")
+            rows.append({"study": s, "design": d.get("design", {}), "source": str(p)})
+        elif s in ("d5-2", "d5-3"):
+            base = s.split("-")[1]
+            p = pub / "extensions" / f"study_{base}.json"
+            d = _load_json(pub, f"extensions/study_{base}.json")
+            d5_design = dict(d.get("design", {}))
+            d5_design.update(_source_block(d, f"d5_{'memory' if base == '2' else 'graded'}"))
+            rows.append({"study": s, "design": d5_design, "source": str(p)})
+    return rows
 
 
 # --------------------------------------------------------------------------
@@ -744,6 +776,11 @@ def run(args) -> None:
 
     row_counts = {}
 
+    model_meta_rows = _collect_model_meta(studies, pub)
+    row_counts["model_meta"] = len(model_meta_rows)
+    if model_meta_rows:
+        print(f"model_meta: {len(model_meta_rows)} rows")
+
     conditions = _build_conditions(studies, pub)
     row_counts["conditions"] = len(conditions)
     print(f"conditions: {len(conditions)} rows")
@@ -810,6 +847,7 @@ def run(args) -> None:
             cur.execute("DROP TABLE IF EXISTS _staging_d5_runs")
             cur.execute("DROP TABLE IF EXISTS _staging_hysteresis")
             cur.execute("DROP TABLE IF EXISTS _staging_hysteresis_trajectories")
+            cur.execute("DROP TABLE IF EXISTS _staging_model_meta")
         conn.commit()
 
         # staging tables mirror live ones (no FKs between staging)
@@ -847,7 +885,11 @@ def run(args) -> None:
                 "INCLUDING DEFAULTS INCLUDING IDENTITY)"
             )
             cur.execute(
-                "CREATE TABLE _staging_hysteresis (LIKE hysteresis "
+                "CREATE TABLE _staging_hysteresis_trajectories (LIKE hysteresis_trajectories "
+                "INCLUDING DEFAULTS INCLUDING IDENTITY)"
+            )
+            cur.execute(
+                "CREATE TABLE _staging_model_meta (LIKE model_meta "
                 "INCLUDING DEFAULTS INCLUDING IDENTITY)"
             )
             cur.execute(
@@ -916,6 +958,11 @@ def run(args) -> None:
         if not hysteresis_trajectories.empty:
             _insert_copy(conn, "_staging_hysteresis_trajectories", hysteresis_trajectories)
 
+        if model_meta_rows:
+            model_meta_df = pd.DataFrame(model_meta_rows)
+            model_meta_df["design"] = model_meta_df["design"].apply(json.dumps)
+            _insert_copy(conn, "_staging_model_meta", model_meta_df)
+
         conn.commit()
 
         # ---- swap in one transaction ----
@@ -923,7 +970,7 @@ def run(args) -> None:
             cur.execute(
                 "TRUNCATE TABLE conditions, runs, trials, d5_runs, hysteresis, "
                 "hysteresis_trajectories, base_cost_runs, base_error_traces, "
-                "extension_condition_aggregates, extension_trajectories "
+                "extension_condition_aggregates, extension_trajectories, model_meta "
                 "RESTART IDENTITY CASCADE"
             )
             cur.execute("INSERT INTO conditions SELECT * FROM _staging_conditions")
@@ -936,6 +983,7 @@ def run(args) -> None:
             cur.execute("INSERT INTO d5_runs SELECT * FROM _staging_d5_runs")
             cur.execute("INSERT INTO hysteresis SELECT * FROM _staging_hysteresis")
             cur.execute("INSERT INTO hysteresis_trajectories SELECT * FROM _staging_hysteresis_trajectories")
+            cur.execute("INSERT INTO model_meta SELECT * FROM _staging_model_meta")
             cur.execute("DROP TABLE IF EXISTS _staging_conditions")
             cur.execute("DROP TABLE IF EXISTS _staging_runs")
             cur.execute("DROP TABLE IF EXISTS _staging_trials")
@@ -946,6 +994,7 @@ def run(args) -> None:
             cur.execute("DROP TABLE IF EXISTS _staging_d5_runs")
             cur.execute("DROP TABLE IF EXISTS _staging_hysteresis")
             cur.execute("DROP TABLE IF EXISTS _staging_hysteresis_trajectories")
+            cur.execute("DROP TABLE IF EXISTS _staging_model_meta")
             # metadata
             import subprocess
             sha = ""

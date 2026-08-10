@@ -27,7 +27,7 @@ def test_schema_tables_exist(engine):
         for t in (
             "conditions", "runs", "trials", "base_cost_runs", "base_error_traces",
             "extension_condition_aggregates", "extension_trajectories", "d5_runs",
-            "hysteresis", "hysteresis_trajectories", "ingest_meta",
+            "hysteresis", "hysteresis_trajectories", "ingest_meta", "model_meta",
         ):
             row = c.exec_driver_sql(
                 "SELECT to_regclass('public." + t + "')"
@@ -130,3 +130,12 @@ def test_hysteresis_trajectory(engine):
     df = loaders.hysteresis_trajectory_data("2", "full", "cyclic")
     assert not df.empty
     assert df["init_condition"].nunique() == 2
+
+
+def test_model_meta(engine):
+    for study in ("1", "2", "3", "d5-1"):
+        design = loaders.model_meta(study)
+        assert design, f"model_meta missing design for study {study}"
+        s = loaders.fixed_parameters_html(study, design)
+        assert "n/a" not in s
+        assert "σ<sub>E</sub>=" in s or "σ<sub>E</sub> = " in s

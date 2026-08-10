@@ -7,7 +7,7 @@ st.set_page_config(
 )
 
 from dashboard import db, loaders  # noqa: E402
-from dashboard.ui import render_glossary  # noqa: E402
+from dashboard.ui import apply_global_style, render_glossary  # noqa: E402
 
 try:
     db.init_db()
@@ -22,6 +22,8 @@ def overview_page() -> None:
         "Interactive companion to *Why Even Accurate Experts Lose Trust: "
         "A Multi-Agent Reinforcement Learning Model*."
     )
+
+    apply_global_style()
 
     meta = loaders.get_meta()
     if not meta.empty:

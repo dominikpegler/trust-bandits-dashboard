@@ -3,7 +3,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from . import loaders, plotting
-from .ui import help_text, metadata_box
+from .ui import help_text, metadata_box, model_description
 
 
 def _ci(sd, n_runs):
@@ -83,12 +83,12 @@ def render_extension_page(study: str):
     model_name = loaders.study_label(study)
     evaluation_mode = "binary" if study == "2" else "continuous"
 
+    st.markdown(model_description(study))
     st.markdown(
-        rf"""
-This page shows the **{model_name}**. The parameter-landscape section follows
-the paper's three heatmap slices: $\mu_E \times c_{{\mathrm{{pen}}}}$ at fixed
-$d_T$, $d_T \times c_{{\mathrm{{pen}}}}$ at fixed $\mu_E$, and $d_T \times \mu_E$ at
-fixed $c_{{\mathrm{{pen}}}}$.
+        r"""
+The parameter-landscape section follows the paper's three heatmap slices:
+$\mu_E \times c_{{\mathrm{pen}}}$ at fixed $d_T$, $d_T \times c_{{\mathrm{pen}}}$
+at fixed $\mu_E$, and $d_T \times \mu_E$ at fixed $c_{{\mathrm{pen}}}$.
 """
     )
 
@@ -143,10 +143,12 @@ fixed $c_{{\mathrm{{pen}}}}$.
             ("Regime", "cyclic"),
             ("Feedback", feedback),
             ("N", f"{n_runs} simulations" if n_runs else "n/a"),
+            ("T", "100 trials"),
             ("Aggregation", "steady-state" if steady else "full-range"),
             ("Color", "p(Expert)"),
             ("Swept", "μ<sub>E</sub> × c<sub>pen</sub>, d<sub>T</sub> × c<sub>pen</sub>, d<sub>T</sub> × μ<sub>E</sub>"),
             ("Selected", f"μ<sub>E</sub>={selected_mu}, d<sub>T</sub>={selected_d:g}, c<sub>pen</sub>={selected_c_pen:g}"),
+            ("Fixed", loaders.fixed_parameters_html(study)),
         ]
     )
 
@@ -248,7 +250,7 @@ fixed $c_{{\mathrm{{pen}}}}$.
         st.plotly_chart(
             plotting.trajectory_figure(
                 dyn, "trust",
-                title=f"Selected condition trust · {model_name} · feedback={feedback}",
+                title=f"Selected condition: μ<sub>E</sub>={selected_mu}, d<sub>T</sub>={selected_d:g}, c<sub>pen</sub>={selected_c_pen:g} · Trust · {model_name} · feedback={feedback}",
                 stats=stats["trust"],
             ),
             use_container_width=True,
@@ -256,7 +258,7 @@ fixed $c_{{\mathrm{{pen}}}}$.
         st.plotly_chart(
             plotting.trajectory_figure(
                 dyn, "accuracy",
-                title=f"Selected condition accuracy · {model_name} · feedback={feedback}",
+                title=f"Selected condition: μ<sub>E</sub>={selected_mu}, d<sub>T</sub>={selected_d:g}, c<sub>pen</sub>={selected_c_pen:g} · Accuracy · {model_name} · feedback={feedback}",
                 stats=stats["accuracy"],
             ),
             use_container_width=True,
@@ -264,7 +266,7 @@ fixed $c_{{\mathrm{{pen}}}}$.
         st.plotly_chart(
             plotting.trajectory_figure(
                 dyn, "p_expert",
-                title=f"Selected condition p(Expert) · {model_name} · feedback={feedback}",
+                title=f"Selected condition: μ<sub>E</sub>={selected_mu}, d<sub>T</sub>={selected_d:g}, c<sub>pen</sub>={selected_c_pen:g} · p(Expert) · {model_name} · feedback={feedback}",
                 stats=stats["p_expert"],
             ),
             use_container_width=True,
