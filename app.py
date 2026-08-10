@@ -15,6 +15,8 @@ except Exception as e:  # pragma: no cover
     st.error(f"Could not connect to the database: {e}")
     st.stop()
 
+apply_global_style()
+
 
 def overview_page() -> None:
     st.title("Trust-Bandits Explorer")
@@ -22,8 +24,6 @@ def overview_page() -> None:
         "Interactive companion to *Why Even Accurate Experts Lose Trust: "
         "A Multi-Agent Reinforcement Learning Model*."
     )
-
-    apply_global_style()
 
     meta = loaders.get_meta()
     if not meta.empty:
@@ -35,18 +35,9 @@ def overview_page() -> None:
         st.warning("Database is empty. Run `python scripts/ingest.py` to populate it.")
 
     st.markdown(
-        r"""
-Use the sidebar pages to explore the simulation results:
-
-- **Base Model** — expert fragility, difficulty effects, and cognitive-cost
-  effects.
-- **Memory Model** — source-memory parameter landscape and hysteresis.
-- **Graded-Evaluation Model** — continuous-evaluation parameter landscape and
-  hysteresis.
-- **Polarization Extension** — echo-chamber bifurcation over the
-  landscape-clustering × peer-correlation grid (base model).
-- **Live Simulator** — run a single simulation with new parameters on the fly.
-"""
+        "Each model page includes its own description and a parameter glossary. "
+        "Use the sidebar to explore the base, memory, graded-evaluation, "
+        "polarization, and live-simulator pages."
     )
     render_glossary()
 

@@ -2,7 +2,7 @@ import streamlit as st
 
 from dashboard import loaders, plotting
 from dashboard.loaders import fixed_parameters_html
-from dashboard.ui import help_text, metadata_box, model_description
+from dashboard.ui import help_text, metadata_sidebar, model_description
 
 REP_MU = 0.65
 REP_CPEN = 6.0
@@ -26,9 +26,6 @@ with st.sidebar:
         value=True,
         help=help_text("aggregate_steady"),
     )
-    st.caption(
-        "Affects only condition-level metric aggregation; trajectory panels still show full trial series."
-    )
 
 heat = loaders.base_heatmap_cells(feedback, steady=steady)
 if heat.empty:
@@ -41,48 +38,49 @@ with st.sidebar:
     st.header("Selected condition")
     selected_mu = float(
         st.selectbox(
-            "Evidence strength",
+            r"Evidence strength ($\mu_E$)",
             mu_levels,
             index=mu_levels.index(REP_MU) if REP_MU in mu_levels else 0,
             help=help_text("mu_e"),
         )
     )
-    st.caption(r"$\mu_E$")
     selected_c_pen = float(
         st.selectbox(
-            "Penalty",
+            r"Penalty ($c_{\mathrm{pen}}$)",
             pen_levels,
             index=pen_levels.index(REP_CPEN) if REP_CPEN in pen_levels else 0,
             help=help_text("c_pen"),
         )
     )
-    st.caption(r"$c_{\mathrm{pen}}$")
 
-metadata_box(
-    [
-        ("Model", "Base model"),
-        ("Feedback", feedback),
-        ("N", "1000 runs per cell"),
-        ("T", "50 trials"),
-        ("Aggregation", "steady-state" if steady else "full-range"),
-        ("Swept", "μ<sub>E</sub> × c<sub>pen</sub>"),
-        (
-            "Selected",
-            f"μ<sub>E</sub>={selected_mu}, c<sub>pen</sub>={selected_c_pen:g}",
-        ),
-        (
-            "Fixed",
-            fixed_parameters_html("1"),
-        ),
-    ]
+n_runs = loaders.condition_n_runs(
+    "1", feedback, "binary", "stationary", selected_mu, selected_c_pen
 )
+cid = loaders.condition_id(
+    "1", feedback, "binary", "stationary", selected_mu, selected_c_pen
+)
+_traj = loaders.trajectory_data(cid, steady=False) if cid is not None else None
+n_trials = int(_traj["trial"].max()) if _traj is not None and not _traj.empty else None
+
+with st.sidebar:
+    metadata_sidebar(
+        "Condition metadata",
+        [
+            ("N", f"{n_runs} runs per cell" if n_runs else "n/a"),
+            ("T", f"{n_trials} trials" if n_trials else "n/a"),
+            ("Swept", "μ<sub>E</sub> × c<sub>pen</sub>"),
+            (
+                "Fixed",
+                fixed_parameters_html("1"),
+            ),
+        ],
+    )
 
 st.subheader("D1: Expert fragility heatmap")
 st.markdown(
-    "Color encodes mean p(Expert). White numbers are the accuracy gap "
-    "(Expert − Peers). White outlines mark expert-fragility cells where the "
-    "Expert is more accurate but p(Expert) < 0.5. The red outline marks the "
-    "currently selected condition used below."
+    "Color = mean p(Expert); white numbers = accuracy gap (Expert − Peers); "
+    "white outlines = fragility cells (Expert more accurate yet p(Expert) < 0.5); "
+    "red outline = the selected condition below."
 )
 st.plotly_chart(
     plotting.base_paradox_heatmap_figure(heat, feedback, selected_mu, selected_c_pen),
@@ -129,7 +127,7 @@ else:
             plotting.trajectory_figure(
                 traj,
                 "trust",
-                title=f"Selected condition: μ<sub>E</sub>={selected_mu}, c<sub>pen</sub>={selected_c_pen:g} · Trust",
+                title="Trust",
                 stats=stats["trust"],
             ),
             use_container_width=True,
@@ -138,7 +136,7 @@ else:
             plotting.trajectory_figure(
                 traj,
                 "accuracy",
-                title=f"Selected condition: μ<sub>E</sub>={selected_mu}, c<sub>pen</sub>={selected_c_pen:g} · Rolling accuracy",
+                title="Rolling accuracy",
                 stats=stats["accuracy"],
             ),
             use_container_width=True,
@@ -147,7 +145,7 @@ else:
             plotting.trajectory_figure(
                 traj,
                 "p_expert",
-                title=f"Selected condition: μ<sub>E</sub>={selected_mu}, c<sub>pen</sub>={selected_c_pen:g} · p(Expert)",
+                title="p(Expert)",
                 stats=stats["p_expert"],
             ),
             use_container_width=True,
@@ -163,31 +161,27 @@ if d2.empty or d3.empty:
         "D2/D3 data are missing. Run a full ingest to load base-model support tables."
     )
 else:
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.plotly_chart(
-            plotting.source_accuracy_by_mu_figure(d2), use_container_width=True
-        )
-    with col2:
-        st.plotly_chart(
-            plotting.choice_area_ci_figure(
-                d2,
-                "mu_e",
-                title="p(Expert) by evidence strength",
-                x_label="Evidence strength (μ<sub>E</sub>)",
-            ),
-            use_container_width=True,
-        )
-    with col3:
-        st.plotly_chart(
-            plotting.choice_area_ci_figure(
-                d3,
-                "cost_sum",
-                title="p(Expert) by cognitive cost",
-                x_label="Cognitive cost weight (w<sub>N</sub> + w<sub>var</sub>)",
-            ),
-            use_container_width=True,
-        )
+    st.plotly_chart(
+        plotting.source_accuracy_by_mu_figure(d2), use_container_width=True
+    )
+    st.plotly_chart(
+        plotting.choice_area_ci_figure(
+            d2,
+            "mu_e",
+            title="p(Expert) by evidence strength",
+            x_label="Evidence strength (μ<sub>E</sub>)",
+        ),
+        use_container_width=True,
+    )
+    st.plotly_chart(
+        plotting.choice_area_ci_figure(
+            d3,
+            "cost_sum",
+            title="p(Expert) by cognitive cost",
+            x_label="Cognitive cost weight (w<sub>N</sub> + w<sub>var</sub>)",
+        ),
+        use_container_width=True,
+    )
 
 with st.expander("Explore other base-model metrics"):
     metric = st.selectbox(
@@ -201,9 +195,6 @@ with st.expander("Explore other base-model metrics"):
     if df.empty:
         st.warning("No data for this selection.")
     else:
-        n_runs = loaders.condition_n_runs(
-            "1", feedback, "binary", "stationary", REP_MU, REP_CPEN
-        )
         n_caption = f" · N = {n_runs} simulations" if n_runs else ""
         st.plotly_chart(
             plotting.heatmap_figure(

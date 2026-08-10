@@ -8,7 +8,8 @@ st.caption("Run a single simulation with new parameters. Results are not stored.
 
 st.markdown(
     "**How to read these plots:** solid line = mean across replications; shaded "
-    "band = **95% CI** across replications. The boxed numbers report the "
+    "band = **95% CI** across replications (shown only when replications ≥ 2). "
+    "The boxed numbers report the "
     "**steady-state mean** (second half of trials, primary) and the "
     "**full-range mean** (all trials, secondary)."
 )

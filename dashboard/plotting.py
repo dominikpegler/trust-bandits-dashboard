@@ -288,13 +288,13 @@ def base_paradox_heatmap_figure(
                 line=dict(color="red", width=2), fillcolor="rgba(0,0,0,0)",
             )
     fig.update_layout(
-        title=f"Base model · feedback={feedback_mode}",
+        title="",
         xaxis_title="Evidence strength (μ<sub>E</sub>)",
         yaxis_title="Asymmetric penalty (c<sub>pen</sub>)",
         xaxis=dict(tickmode="array", tickvals=x_pos, ticktext=[f"{x:.3g}" for x in mu_vals]),
         yaxis=dict(tickmode="array", tickvals=y_pos, ticktext=[f"{y:.3g}" for y in pen_vals], autorange="reversed"),
         height=560,
-        margin=dict(l=70, r=20, t=60, b=60),
+        margin=dict(l=70, r=20, t=20, b=60),
     )
     return fig
 
@@ -363,7 +363,7 @@ def parameter_paradox_heatmap_figure(
         xaxis=dict(tickmode="array", tickvals=list(range(len(x_vals))), ticktext=[f"{v:.3g}" for v in x_vals]),
         yaxis=dict(tickmode="array", tickvals=list(range(len(y_vals))), ticktext=[f"{v:.3g}" for v in y_vals], autorange="reversed"),
         height=460,
-        margin=dict(l=60, r=20, t=60, b=60),
+        margin=dict(l=60, r=20, t=60 if title else 20, b=60),
     )
     return fig
 
@@ -429,7 +429,7 @@ def parameter_metric_heatmap_figure(
         xaxis=dict(tickmode="array", tickvals=list(range(len(x_vals))), ticktext=[f"{v:.3g}" for v in x_vals]),
         yaxis=dict(tickmode="array", tickvals=list(range(len(y_vals))), ticktext=[f"{v:.3g}" for v in y_vals], autorange="reversed"),
         height=460,
-        margin=dict(l=60, r=20, t=60, b=60),
+        margin=dict(l=60, r=20, t=60 if title else 20, b=60),
     )
     return fig
 
@@ -560,18 +560,23 @@ def trajectory_figure(
     metric: str,
     title: str = "",
     stats: dict | None = None,
+    show_ci: bool | None = None,
 ) -> go.Figure:
     """Mean +/- 95% CI ribbon over trials for a metric (Expert vs Peers).
 
     Bands are 95% confidence intervals across runs (matching the paper).
     `stats` may carry {"steady": <float or (expert, peers)>, "full": ...} to be
     drawn as a text annotation (steady-state primary, full-range secondary).
+    `show_ci` defaults to False when only one run is present (a CI from a
+    single run is meaningless) and True otherwise.
     """
     fig = go.Figure()
     if df.empty:
         fig.add_annotation(text="No trial data for this condition", showarrow=False)
         return fig
     n_runs = int(df["n_runs"].iloc[0]) if "n_runs" in df.columns else 1
+    if show_ci is None:
+        show_ci = n_runs > 1
     if metric == "p_expert":
         fig.add_trace(
             go.Scatter(
@@ -579,7 +584,7 @@ def trajectory_figure(
                 mode="lines", name="p(Expert)",
                 line=dict(color=COLOR_EXPERT, width=2.5),
                 error_y=dict(type="data", array=_ci(df["sd_p_expert"], n_runs),
-                             visible=True, color=_source_rgba("expert", 0.3)),
+                             visible=show_ci, color=_source_rgba("expert", 0.3)),
             )
         )
     elif metric == "trust":
@@ -592,7 +597,7 @@ def trajectory_figure(
                 go.Scatter(
                     x=df["trial"], y=df[col], mode="lines", name=name,
                     line=dict(color=_source_hex(src), width=2.5),
-                    error_y=dict(type="data", array=_ci(sd, n_runs), visible=True,
+                    error_y=dict(type="data", array=_ci(sd, n_runs), visible=show_ci,
                                  color=_source_rgba(src, 0.3)),
                 )
             )
@@ -606,7 +611,7 @@ def trajectory_figure(
                 go.Scatter(
                     x=df["trial"], y=df[col], mode="lines", name=name,
                     line=dict(color=_source_hex(src), width=2.5),
-                    error_y=dict(type="data", array=_ci(sd, n_runs), visible=True,
+                    error_y=dict(type="data", array=_ci(sd, n_runs), visible=show_ci,
                                  color=_source_rgba(src, 0.3)),
                 )
             )

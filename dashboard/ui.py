@@ -92,104 +92,143 @@ def apply_global_style() -> None:
     paper-style extension slices) are not compressed into the default narrow
     block.
     """
-    st.markdown(
+    st.html(
         """
 <style>
-[data-testid="stMainBlockContainer"] .block-container {
+[data-testid="stMainBlockContainer"] {
     max-width: 1400px !important;
 }
 </style>
-""",
-        unsafe_allow_html=True,
+"""
     )
+
+
+# Glossary display names for keys in PARAMETER_HELP, grouped by section.
+# The definition text is reused from PARAMETER_HELP so there is a single source
+# of truth per term.
+GLOSSARY_LABELS = {
+    "p_expert": "p(Expert)",
+    "p_peers": "p(Peers)",
+    "trust": "Trust",
+    "accuracy": "Accuracy",
+    "accuracy_gap": "Accuracy gap",
+    "steady_state": "Steady-state mean",
+    "full_range": "Full-range mean",
+    "ci": "95% CI",
+    "feedback": "Feedback mode",
+    "mu_e": "$\\mu_E$ / evidence strength",
+    "c_pen": "$c_{\\mathrm{pen}}$ / asymmetric penalty",
+    "sigma_e": "$\\sigma_E$ / evidence noise",
+    "sigma_expert": "$\\sigma_{\\mathrm{expert}}$ / Expert noise",
+    "sigma_peers_multiplier": "Peers noise multiplier",
+    "m_peers": "$m_{\\mathrm{peers}}$ / number of peers",
+    "f_peers": "$f_{\\mathrm{peers}}$ / peers sampling fraction",
+    "lr_base": "$\\alpha_{\\mathrm{base}}$ / learning rate",
+    "landscape_size": "$L$ / landscape size",
+    "peer_cost_weights": "Peer cost weights",
+    "tau": "$\\tau$ / decision temperature",
+    "w_init_expert": "Initial trust in Expert",
+    "w_init_peers": "Initial trust in Peers",
+    "trials": "Trials",
+    "replications": "Replications",
+    "d_t": "$d_T$ / Expert inertia",
+    "cyclic_regime": "Cyclic regime",
+    "stationary_regime": "Stationary regime",
+    "hysteresis": "Hysteresis",
+    "baseline_init": "Baseline initialization",
+    "post_collapse_init": "Post-collapse initialization",
+    "rho_clust": "$\\rho_{\\mathrm{clust}}$ / landscape clustering",
+    "rho_peer": "$\\rho_{\\mathrm{peer}}$ / peer correlation",
+    "bifurcation": "Bifurcation",
+    "sd_runs": "SD across runs",
+    "aggregate_steady": "Steady-state aggregation",
+}
+
+GLOSSARY_GROUPS = [
+    (
+        "Common outputs",
+        [
+            "p_expert",
+            "p_peers",
+            "trust",
+            "accuracy",
+            "accuracy_gap",
+            "steady_state",
+            "full_range",
+            "ci",
+        ],
+    ),
+    (
+        "Base Model parameters",
+        [
+            "mu_e",
+            "c_pen",
+            "sigma_e",
+            "tau",
+            "lr_base",
+            "landscape_size",
+            "peer_cost_weights",
+        ],
+    ),
+    (
+        "Memory and Graded-Evaluation parameters",
+        [
+            "d_t",
+            "cyclic_regime",
+            "stationary_regime",
+            "hysteresis",
+            "baseline_init",
+            "post_collapse_init",
+        ],
+    ),
+    (
+        "Polarization Extension parameters",
+        ["rho_clust", "rho_peer", "bifurcation", "sd_runs"],
+    ),
+    (
+        "Live Simulator-only parameters",
+        [
+            "sigma_expert",
+            "sigma_peers_multiplier",
+            "m_peers",
+            "f_peers",
+            "w_init_expert",
+            "w_init_peers",
+            "trials",
+            "replications",
+        ],
+    ),
+]
 
 
 def render_glossary() -> None:
     """Render a compact glossary for public-facing orientation."""
     with st.expander("Parameter and metric glossary"):
-        st.markdown(
-            r"""
-**Common outputs**
-
-- **p(Expert)**: Probability that the simulated agent chooses the Expert rather than Peers on a trial.
-- **p(Peers)**: Probability that the simulated agent chooses Peers; this is 1 - p(Expert).
-- **Trust**: Learned source weight used when deciding whether to rely on the Expert or Peers.
-- **Accuracy**: Fraction of trials on which a source gives the correct answer.
-- **Accuracy gap**: Expert accuracy minus Peers accuracy; positive values mean the Expert is more accurate.
-- **Steady-state mean**: Mean over the second half of trials, used as the primary summary once behavior has settled.
-- **Full-range mean**: Mean over all trials, useful for seeing the effect of early transient behavior.
-- **95% CI**: Confidence interval across simulation runs or replications.
-
-**Base Model parameters**
-
-- **$\mu_E$ / evidence strength**: Task evidence strength; larger values make the Expert's signal more informative.
-- **$c_{\mathrm{pen}}$ / asymmetric penalty**: Penalty for high-confidence errors; larger values make mistakes more costly.
-- **$\sigma_E$ / evidence noise**: Noise in the task evidence available to the model.
-- **$\tau$ / decision temperature**: Lower values make choices more deterministic from current trust.
-- **$\alpha_{\mathrm{base}}$ / learning rate**: Trust-update rate; larger values adapt faster to recent outcomes.
-- **$L$**: Number of landscape/task items in the simulated environment.
-- **Peer cost weights**: Cognitive-cost terms attached to peer information use.
-
-**Memory and Graded-Evaluation parameters**
-
-- **$d_T$ / Expert inertia**: Memory-timescale parameter; larger values make source-memory effects persist longer.
-- **Cyclic regime**: Environment alternates between evidence-strength values over repeated cycles.
-- **Stationary regime**: Environment keeps the same evidence-strength setting over time.
-- **Hysteresis**: Later trust can depend on earlier trust history, even under the same current parameters.
-- **Baseline initialization**: Hysteresis trajectory initialized with balanced Expert and Peers trust.
-- **Post-collapse initialization**: Hysteresis trajectory initialized after an Expert-trust collapse.
-
-**Polarization Extension parameters**
-
-- **$\rho_{\mathrm{clust}}$ / landscape clustering**: Controls how similar nearby agents' environments are.
-- **$\rho_{\mathrm{peer}}$ / peer correlation**: Controls how correlated peer signals are.
-- **Bifurcation**: Split of runs into low-Expert-trust and high-Expert-trust modes under the same parameters.
-- **SD across runs**: Standard deviation across runs; high values indicate stronger run-to-run divergence.
-
-**Live Simulator-only parameters**
-
-- **$\sigma_{\mathrm{expert}}$ / Expert noise**: Noise in the Expert's advice.
-- **Peers noise multiplier**: Multiplier applied to Expert noise to set Peers noise.
-- **$m_{\mathrm{peers}}$ / number of peers**: Number of peer advisers sampled by the model.
-- **$f_{\mathrm{peers}}$ / peers sampling fraction**: Fraction of available peer information sampled on each trial.
-- **Initial trust**: Starting trust assigned to each source before learning from outcomes.
-- **Trials**: Number of sequential decisions in each simulation run.
-- **Replications**: Number of independent simulation runs averaged together.
-"""
-        )
+        lines = []
+        for section, keys in GLOSSARY_GROUPS:
+            lines.append(f"**{section}**")
+            lines.append("")
+            for key in keys:
+                label = GLOSSARY_LABELS.get(key, key)
+                lines.append(f"- **{label}**: {PARAMETER_HELP[key]}")
+            lines.append("")
+        st.markdown("\n".join(lines))
 
 
-def metadata_box(items: list[tuple[str, str]]) -> None:
-    """Render compact, consistent condition metadata.
+def metadata_sidebar(title: str, items: list[tuple[str, str]]) -> None:
+    """Render compact condition metadata as stacked lines for the sidebar.
 
-    Values may include trusted HTML snippets such as <sub>...</sub>. Labels are
-    escaped; values are not escaped so math-like HTML can render consistently.
+    Keeps all condition and simulation parameters in the sidebar alongside the
+    controls. Values may include trusted HTML snippets such as <sub>...</sub>;
+    labels are escaped, values are not.
     """
-    chips = []
+    lines = []
     for label, value in items:
-        chips.append(
-            f"<span class='metadata-chip'><strong>{html.escape(label)}:</strong> {value}</span>"
+        lines.append(
+            f"<div style='margin:0.15rem 0;'><strong>{html.escape(label)}:</strong> {value}</div>"
         )
     st.markdown(
-        """
-<style>
-.metadata-box {
-  border: 1px solid rgba(49, 51, 63, 0.18);
-  background: rgba(250, 250, 252, 0.9);
-  border-radius: 0.5rem;
-  padding: 0.55rem 0.65rem;
-  margin: 0.4rem 0 1rem 0;
-  line-height: 1.65;
-  font-size: 0.94rem;
-}
-.metadata-chip {
-  display: inline-block;
-  margin-right: 1.1rem;
-}
-</style>
-"""
-        + "<div class='metadata-box'>"
-        + "".join(chips)
-        + "</div>",
+        f"<div style='font-size:0.82rem; color:rgba(49,51,63,0.7); margin-top:0.6rem;'>{title}</div>"
+        + "".join(lines),
         unsafe_allow_html=True,
     )

@@ -3,11 +3,9 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from . import loaders, plotting
-from .ui import help_text, metadata_box, model_description
+from .ui import help_text, metadata_sidebar, model_description
 
-
-def _ci(sd, n_runs):
-    return 1.96 * sd / np.sqrt(n_runs)
+_ci = plotting._ci
 
 
 def _add_filled_band(fig, x, y0, y1, color, name=None, showlegend=False):
@@ -81,15 +79,12 @@ def render_extension_page(study: str):
     ingested. Hysteresis is fully folded into the model page.
     """
     model_name = loaders.study_label(study)
-    evaluation_mode = "binary" if study == "2" else "continuous"
 
     st.markdown(model_description(study))
     st.markdown(
-        r"""
-The parameter-landscape section follows the paper's three heatmap slices:
-$\mu_E \times c_{{\mathrm{pen}}}$ at fixed $d_T$, $d_T \times c_{{\mathrm{pen}}}$
-at fixed $\mu_E$, and $d_T \times \mu_E$ at fixed $c_{{\mathrm{pen}}}$.
-"""
+        "Three parameter-landscape slices following the paper, each fixing the "
+        "third parameter: $\\mu_E \\times c_{{\\mathrm{pen}}}$, "
+        "$d_T \\times c_{{\\mathrm{pen}}}$, $d_T \\times \\mu_E$."
     )
 
     with st.sidebar:
@@ -100,7 +95,6 @@ at fixed $\mu_E$, and $d_T \times \mu_E$ at fixed $c_{{\mathrm{pen}}}$.
             value=True,
             help=help_text("aggregate_steady"),
         )
-        st.caption("Affects only condition-level metric aggregation; trajectory panels still show full trial series.")
         levels = loaders.extension_levels(study, "cyclic", feedback)
         st.header("Selected condition")
         selected_mu = st.selectbox(
@@ -127,35 +121,29 @@ at fixed $\mu_E$, and $d_T \times \mu_E$ at fixed $c_{{\mathrm{pen}}}$.
             help=f"cyclic: {help_text('cyclic_regime')} stationary: {help_text('stationary_regime')}",
         )
 
-    n_runs = loaders.condition_n_runs(
-        study,
-        feedback,
-        evaluation_mode,
-        "cyclic",
-        selected_mu,
-        selected_c_pen,
-        selected_d,
-    )
-    metadata_box(
-        [
-            ("Model", model_name),
-            ("Evaluation", evaluation_mode),
-            ("Regime", "cyclic"),
-            ("Feedback", feedback),
-            ("N", f"{n_runs} simulations" if n_runs else "n/a"),
-            ("T", "100 trials"),
-            ("Aggregation", "steady-state" if steady else "full-range"),
-            ("Color", "p(Expert)"),
-            ("Swept", "μ<sub>E</sub> × c<sub>pen</sub>, d<sub>T</sub> × c<sub>pen</sub>, d<sub>T</sub> × μ<sub>E</sub>"),
-            ("Selected", f"μ<sub>E</sub>={selected_mu}, d<sub>T</sub>={selected_d:g}, c<sub>pen</sub>={selected_c_pen:g}"),
-            ("Fixed", loaders.fixed_parameters_html(study)),
-        ]
-    )
-
     h1 = loaders.extension_heatmap_cells(
         study, feedback, "cyclic", x_var="mu_e", y_var="c_pen",
         fixed={"expert_inertia_divisor": selected_d}, steady=steady, metric="p_expert",
     )
+    dyn = loaders.extension_trajectory_data(
+        study, feedback, "cyclic", selected_mu, selected_d, selected_c_pen
+    )
+    n_trials = int(dyn["trial"].max()) if not dyn.empty else None
+    _cell = h1[
+        np.isclose(h1["mu_e"], float(selected_mu))
+        & np.isclose(h1["c_pen"], float(selected_c_pen))
+    ] if not h1.empty else None
+    n_runs = int(_cell["n_runs"].iloc[0]) if _cell is not None and not _cell.empty else None
+    with st.sidebar:
+        metadata_sidebar(
+            "Condition metadata",
+            [
+                ("N", f"{n_runs} runs per cell" if n_runs else "n/a"),
+                ("T", f"{n_trials} trials" if n_trials else "n/a"),
+                ("Fixed", loaders.fixed_parameters_html(study)),
+            ],
+        )
+
     h2 = loaders.extension_heatmap_cells(
         study, feedback, "cyclic", x_var="expert_inertia_divisor", y_var="c_pen",
         fixed={"mu_e": selected_mu}, steady=steady, metric="p_expert",
@@ -164,25 +152,26 @@ at fixed $\mu_E$, and $d_T \times \mu_E$ at fixed $c_{{\mathrm{pen}}}$.
         study, feedback, "cyclic", x_var="expert_inertia_divisor", y_var="mu_e",
         fixed={"c_pen": selected_c_pen}, steady=steady, metric="p_expert",
     )
-    cols = st.columns(3)
     heatmaps = [
-        (h1, "μ<sub>E</sub>", "c<sub>pen</sub>", f"fixed d<sub>T</sub>={selected_d:g}", selected_mu, selected_c_pen),
-        (h2, "d<sub>T</sub>", "c<sub>pen</sub>", f"fixed μ<sub>E</sub>={selected_mu}", selected_d, selected_c_pen),
-        (h3, "d<sub>T</sub>", "μ<sub>E</sub>", f"fixed c<sub>pen</sub>={selected_c_pen:g}", selected_d, selected_mu),
+        (h1, "μ<sub>E</sub>", "c<sub>pen</sub>", "fixed d<sub>T</sub>", selected_mu, selected_c_pen),
+        (h2, "d<sub>T</sub>", "c<sub>pen</sub>", "fixed μ<sub>E</sub>", selected_d, selected_c_pen),
+        (h3, "d<sub>T</sub>", "μ<sub>E</sub>", "fixed c<sub>pen</sub>", selected_d, selected_mu),
     ]
-    for col, (data, xlab, ylab, title, sx, sy) in zip(cols, heatmaps):
-        with col:
-            if data.empty:
-                st.warning("No data for this heatmap slice.")
-            else:
-                st.plotly_chart(
-                    plotting.parameter_paradox_heatmap_figure(
-                        data, x_label=xlab, y_label=ylab,
-                        title=f"p(Expert) · {title}",
-                        selected_x=sx, selected_y=sy,
-                    ),
-                    use_container_width=True,
+    main_figs = []
+    for data, xlab, ylab, title, sx, sy in heatmaps:
+        if not data.empty:
+            main_figs.append(
+                plotting.parameter_paradox_heatmap_figure(
+                    data, x_label=xlab, y_label=ylab,
+                    title=title,
+                    selected_x=sx, selected_y=sy,
                 )
+            )
+    if main_figs:
+        for fig in main_figs:
+            st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.warning("No data for these heatmap slices.")
 
     with st.expander("Explore other metrics"):
         metric = st.selectbox(
@@ -202,32 +191,27 @@ at fixed $\mu_E$, and $d_T \times \mu_E$ at fixed $c_{{\mathrm{pen}}}$.
             study, feedback, "cyclic", x_var="expert_inertia_divisor", y_var="mu_e",
             fixed={"c_pen": selected_c_pen}, steady=steady, metric=metric,
         )
-        cols = st.columns(3)
-        for col, (data, xlab, ylab, title, sx, sy) in zip(
-            cols,
-            [
-                (e1, "μ<sub>E</sub>", "c<sub>pen</sub>", f"fixed d<sub>T</sub>={selected_d:g}", selected_mu, selected_c_pen),
-                (e2, "d<sub>T</sub>", "c<sub>pen</sub>", f"fixed μ<sub>E</sub>={selected_mu}", selected_d, selected_c_pen),
-                (e3, "d<sub>T</sub>", "μ<sub>E</sub>", f"fixed c<sub>pen</sub>={selected_c_pen:g}", selected_d, selected_mu),
-            ],
-        ):
-            with col:
-                if data.empty:
-                    st.warning("No data for this heatmap slice.")
-                else:
-                    st.plotly_chart(
-                        plotting.parameter_metric_heatmap_figure(
-                            data, x_label=xlab, y_label=ylab, metric=metric,
-                            title=f"{plotting.METRIC_LABELS.get(metric, metric)} · {title}",
-                            selected_x=sx, selected_y=sy,
-                        ),
-                        use_container_width=True,
+        metric_figs = []
+        for data, xlab, ylab, title, sx, sy in [
+            (e1, "μ<sub>E</sub>", "c<sub>pen</sub>", "fixed d<sub>T</sub>", selected_mu, selected_c_pen),
+            (e2, "d<sub>T</sub>", "c<sub>pen</sub>", "fixed μ<sub>E</sub>", selected_d, selected_c_pen),
+            (e3, "d<sub>T</sub>", "μ<sub>E</sub>", "fixed c<sub>pen</sub>", selected_d, selected_mu),
+        ]:
+            if not data.empty:
+                metric_figs.append(
+                    plotting.parameter_metric_heatmap_figure(
+                        data, x_label=xlab, y_label=ylab, metric=metric,
+                        title=title,
+                        selected_x=sx, selected_y=sy,
                     )
+                )
+        if metric_figs:
+            for fig in metric_figs:
+                st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.warning("No data for this heatmap slice.")
 
     st.subheader("Selected condition dynamics")
-    dyn = loaders.extension_trajectory_data(
-        study, feedback, "cyclic", selected_mu, selected_d, selected_c_pen
-    )
     if dyn.empty:
         st.warning("No extension trajectory data for the selected condition.")
     else:
@@ -250,7 +234,7 @@ at fixed $\mu_E$, and $d_T \times \mu_E$ at fixed $c_{{\mathrm{pen}}}$.
         st.plotly_chart(
             plotting.trajectory_figure(
                 dyn, "trust",
-                title=f"Selected condition: μ<sub>E</sub>={selected_mu}, d<sub>T</sub>={selected_d:g}, c<sub>pen</sub>={selected_c_pen:g} · Trust · {model_name} · feedback={feedback}",
+                title="Trust",
                 stats=stats["trust"],
             ),
             use_container_width=True,
@@ -258,7 +242,7 @@ at fixed $\mu_E$, and $d_T \times \mu_E$ at fixed $c_{{\mathrm{pen}}}$.
         st.plotly_chart(
             plotting.trajectory_figure(
                 dyn, "accuracy",
-                title=f"Selected condition: μ<sub>E</sub>={selected_mu}, d<sub>T</sub>={selected_d:g}, c<sub>pen</sub>={selected_c_pen:g} · Accuracy · {model_name} · feedback={feedback}",
+                title="Accuracy",
                 stats=stats["accuracy"],
             ),
             use_container_width=True,
@@ -266,7 +250,7 @@ at fixed $\mu_E$, and $d_T \times \mu_E$ at fixed $c_{{\mathrm{pen}}}$.
         st.plotly_chart(
             plotting.trajectory_figure(
                 dyn, "p_expert",
-                title=f"Selected condition: μ<sub>E</sub>={selected_mu}, d<sub>T</sub>={selected_d:g}, c<sub>pen</sub>={selected_c_pen:g} · p(Expert) · {model_name} · feedback={feedback}",
+                title="p(Expert)",
                 stats=stats["p_expert"],
             ),
             use_container_width=True,
@@ -281,20 +265,18 @@ at fixed $\mu_E$, and $d_T \times \mu_E$ at fixed $c_{{\mathrm{pen}}}$.
     summary = loaders.hysteresis_data(study, feedback)
     if meta:
         mu_vals = " ↔ ".join(f"{x:.2f}" for x in meta["mu_e_values"])
-        metadata_box(
-            [
-                ("Model", model_name),
-                ("Feedback", feedback),
-                ("Regime", hyst_regime),
-                ("Fixed", f"d<sub>T</sub>={meta['expert_inertia_divisor']:.0f}, c<sub>pen</sub>={meta['c_pen']:.0f}"),
-                ("Evidence strength", mu_vals),
-                ("K", str(meta["cycle_length"])),
-                ("N", f"{meta['n_runs']} runs"),
-                ("T", f"{meta['n_trials']} trials"),
-                ("Baseline trust", "Expert/Peers = 0.5/0.5"),
-                ("Post-collapse trust", "Expert/Peers = 0.1/0.9"),
-            ]
-        )
+        with st.sidebar:
+            metadata_sidebar(
+                "Hysteresis metadata",
+                [
+                    ("Evidence strength", mu_vals),
+                    ("K", str(meta["cycle_length"])),
+                    ("N", f"{meta['n_runs']} runs"),
+                    ("T", f"{meta['n_trials']} trials"),
+                    ("Baseline trust", "Expert/Peers = 0.5/0.5"),
+                    ("Post-collapse trust", "Expert/Peers = 0.1/0.9"),
+                ],
+            )
     st.plotly_chart(hysteresis_trajectory_figure(traj, meta, model_name, feedback, hyst_regime), use_container_width=True)
     with st.expander("Steady-state summary values"):
         st.dataframe(summary)

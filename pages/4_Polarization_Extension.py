@@ -3,7 +3,7 @@ import streamlit as st
 
 from dashboard import loaders, plotting
 from dashboard.loaders import fixed_parameters_html
-from dashboard.ui import help_text, metadata_box, model_description
+from dashboard.ui import help_text, metadata_sidebar, model_description
 
 st.title("Polarization Extension")
 
@@ -35,19 +35,15 @@ if df.empty:
     st.stop()
 
 n_runs = df["run_id"].nunique()
-metadata_box(
-    [
-        ("Model", "Base model"),
-        ("Extension", "Polarization"),
-        ("Feedback", feedback),
-        ("N", f"{n_runs} runs per cell"),
-        ("T", "50 trials"),
-        ("Aggregation", "steady-state p(Expert)"),
-        ("Grid", "ρ<sub>clust</sub> × ρ<sub>peer</sub>"),
-        ("Selected", "μ<sub>E</sub>=0.65, c<sub>pen</sub>=6"),
-        ("Fixed", fixed_parameters_html("d5-1")),
-    ]
-)
+with st.sidebar:
+    metadata_sidebar(
+        "Condition metadata",
+        [
+            ("N", f"{n_runs} runs per cell"),
+            ("T", "50 trials"),
+            ("Fixed", fixed_parameters_html("d5-1")),
+        ],
+    )
 st.caption(
     f"$\\rho_{{\\mathrm{{clust}}}}$: {help_text('rho_clust')} "
     f"$\\rho_{{\\mathrm{{peer}}}}$: {help_text('rho_peer')} "
@@ -84,36 +80,35 @@ with st.expander("Explore trust distributions"):
         )
 
 st.subheader("Bifurcation strength (SD across runs)")
-cols = st.columns(2)
-for col, fb in zip(cols, ["full", "partial"]):
-    with col:
-        sd_df = loaders.d5_runs_data(d5_study, fb, "p_expert")
-        sd_grid = (
-            sd_df.groupby(["clustering", "rho_peers"])["value"]
-            .std()
-            .reset_index()
-            .pivot(index="clustering", columns="rho_peers", values="value")
-            .sort_index(ascending=False)
+sd_figs = []
+for fb in ["full", "partial"]:
+    sd_df = loaders.d5_runs_data(d5_study, fb, "p_expert")
+    sd_grid = (
+        sd_df.groupby(["clustering", "rho_peers"])["value"]
+        .std()
+        .reset_index()
+        .pivot(index="clustering", columns="rho_peers", values="value")
+        .sort_index(ascending=False)
+    )
+    heat = go.Figure(
+        data=go.Heatmap(
+            z=sd_grid.values,
+            x=[f"{x:.2g}" for x in sd_grid.columns],
+            y=[f"{y:.2g}" for y in sd_grid.index],
+            colorscale=[[0, "#f7f7f7"], [1, plotting._blend_white(plotting.COLOR_EXPERT)]],
+            zmin=0,
+            zmax=max(0.25, float(sd_grid.max().max())),
+            text=[[f"{v:.2f}" for v in row] for row in sd_grid.values],
+            texttemplate="%{text}",
+            hovertemplate="ρ<sub>peer</sub>=%{x}<br>ρ<sub>clust</sub>=%{y}<br>SD=%{z:.3f}<extra></extra>",
+            colorbar=dict(title="SD"),
         )
-        heat = go.Figure(
-            data=go.Heatmap(
-                z=sd_grid.values,
-                x=[f"{x:.2g}" for x in sd_grid.columns],
-                y=[f"{y:.2g}" for y in sd_grid.index],
-                colorscale=[[0, "#f7f7f7"], [1, plotting._blend_white(plotting.COLOR_EXPERT)]],
-                zmin=0,
-                zmax=max(0.25, float(sd_grid.max().max())),
-                text=[[f"{v:.2f}" for v in row] for row in sd_grid.values],
-                texttemplate="%{text}",
-                hovertemplate="ρ<sub>peer</sub>=%{x}<br>ρ<sub>clust</sub>=%{y}<br>SD=%{z:.3f}<extra></extra>",
-                colorbar=dict(title="SD"),
-            )
-        )
-        heat.update_layout(
-            title=f"feedback={fb}",
-            xaxis_title="ρ<sub>peer</sub>",
-            yaxis_title="ρ<sub>clust</sub>",
-            height=420,
-            margin=dict(l=60, r=20, t=60, b=50),
-        )
-        st.plotly_chart(heat, use_container_width=True)
+    )
+    heat.update_layout(
+        title=f"feedback={fb}",
+        xaxis_title="ρ<sub>peer</sub>",
+        yaxis_title="ρ<sub>clust</sub>",
+    )
+    sd_figs.append(heat)
+for fig in sd_figs:
+    st.plotly_chart(fig, use_container_width=True)
