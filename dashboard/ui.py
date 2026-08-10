@@ -96,7 +96,7 @@ def apply_global_style() -> None:
         """
 <style>
 [data-testid="stMainBlockContainer"] {
-    max-width: 1400px !important;
+    max-width: 1000px !important;
 }
 </style>
 """
