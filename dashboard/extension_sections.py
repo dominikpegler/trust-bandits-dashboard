@@ -34,10 +34,26 @@ def hysteresis_trajectory_figure(df, meta, model_name, feedback, regime):
         ci = _ci(base["sd_p_expert"].to_numpy(), base["n_runs"].iloc[0])
         lo = np.clip(mean - ci, 0, 1)
         hi = np.clip(mean + ci, 0, 1)
-        _add_filled_band(fig, x, np.zeros_like(lo), lo, plotting._source_rgba("expert", 0.60), "p(Expert), baseline", True)
+        _add_filled_band(
+            fig,
+            x,
+            np.zeros_like(lo),
+            lo,
+            plotting._source_rgba("expert", 0.60),
+            "p(Expert), baseline",
+            True,
+        )
         _add_filled_band(fig, x, lo, mean, plotting._source_rgba("expert", 0.35))
         _add_filled_band(fig, x, mean, hi, plotting._source_rgba("peers", 0.35))
-        _add_filled_band(fig, x, hi, np.ones_like(hi), plotting._source_rgba("peers", 0.60), "p(Peers), baseline", True)
+        _add_filled_band(
+            fig,
+            x,
+            hi,
+            np.ones_like(hi),
+            plotting._source_rgba("peers", 0.60),
+            "p(Peers), baseline",
+            True,
+        )
 
     if not post.empty:
         n_runs = post["n_runs"].iloc[0]
@@ -50,13 +66,20 @@ def hysteresis_trajectory_figure(df, meta, model_name, feedback, regime):
                 y=post["mean_p_expert"],
                 mode="lines",
                 line=dict(color=plotting._source_hex("expert"), width=2.5),
-                error_y=dict(type="data", array=ci, visible=True, color=plotting._source_rgba("expert", 0.25)),
+                error_y=dict(
+                    type="data",
+                    array=ci,
+                    visible=True,
+                    color=plotting._source_rgba("expert", 0.25),
+                ),
                 name=f"p(Expert), post-collapse (M<sub>ss</sub>={ss_mean:.2f})",
             )
         )
 
     if regime == "cyclic" and meta:
-        for it in range(meta["cycle_length"], meta["n_trials"] + 1, meta["cycle_length"]):
+        for it in range(
+            meta["cycle_length"], meta["n_trials"] + 1, meta["cycle_length"]
+        ):
             fig.add_vline(x=it, line_dash="dash", line_color="white", line_width=1)
 
     fig.update_layout(
@@ -89,7 +112,9 @@ def render_extension_page(study: str):
 
     with st.sidebar:
         st.header("Controls")
-        feedback = st.selectbox("Feedback mode", ["full", "partial"], help=help_text("feedback"))
+        feedback = st.selectbox(
+            "Feedback mode", ["full", "partial"], help=help_text("feedback")
+        )
         steady = st.checkbox(
             "Aggregate metric means over steady state (second half of trials)",
             value=True,
@@ -106,7 +131,11 @@ def render_extension_page(study: str):
         selected_d = st.selectbox(
             "Expert inertia ($d_T$)",
             levels["expert_inertia_divisor"],
-            index=levels["expert_inertia_divisor"].index(2.0) if 2.0 in levels["expert_inertia_divisor"] else 0,
+            index=(
+                levels["expert_inertia_divisor"].index(2.0)
+                if 2.0 in levels["expert_inertia_divisor"]
+                else 0
+            ),
             help=help_text("d_t"),
         )
         selected_c_pen = st.selectbox(
@@ -122,18 +151,30 @@ def render_extension_page(study: str):
         )
 
     h1 = loaders.extension_heatmap_cells(
-        study, feedback, "cyclic", x_var="mu_e", y_var="c_pen",
-        fixed={"expert_inertia_divisor": selected_d}, steady=steady, metric="p_expert",
+        study,
+        feedback,
+        "cyclic",
+        x_var="mu_e",
+        y_var="c_pen",
+        fixed={"expert_inertia_divisor": selected_d},
+        steady=steady,
+        metric="p_expert",
     )
     dyn = loaders.extension_trajectory_data(
         study, feedback, "cyclic", selected_mu, selected_d, selected_c_pen
     )
     n_trials = int(dyn["trial"].max()) if not dyn.empty else None
-    _cell = h1[
-        np.isclose(h1["mu_e"], float(selected_mu))
-        & np.isclose(h1["c_pen"], float(selected_c_pen))
-    ] if not h1.empty else None
-    n_runs = int(_cell["n_runs"].iloc[0]) if _cell is not None and not _cell.empty else None
+    _cell = (
+        h1[
+            np.isclose(h1["mu_e"], float(selected_mu))
+            & np.isclose(h1["c_pen"], float(selected_c_pen))
+        ]
+        if not h1.empty
+        else None
+    )
+    n_runs = (
+        int(_cell["n_runs"].iloc[0]) if _cell is not None and not _cell.empty else None
+    )
     with st.sidebar:
         metadata_sidebar(
             "Condition metadata",
@@ -145,34 +186,70 @@ def render_extension_page(study: str):
         )
 
     h2 = loaders.extension_heatmap_cells(
-        study, feedback, "cyclic", x_var="expert_inertia_divisor", y_var="c_pen",
-        fixed={"mu_e": selected_mu}, steady=steady, metric="p_expert",
+        study,
+        feedback,
+        "cyclic",
+        x_var="expert_inertia_divisor",
+        y_var="c_pen",
+        fixed={"mu_e": selected_mu},
+        steady=steady,
+        metric="p_expert",
     )
     h3 = loaders.extension_heatmap_cells(
-        study, feedback, "cyclic", x_var="expert_inertia_divisor", y_var="mu_e",
-        fixed={"c_pen": selected_c_pen}, steady=steady, metric="p_expert",
+        study,
+        feedback,
+        "cyclic",
+        x_var="expert_inertia_divisor",
+        y_var="mu_e",
+        fixed={"c_pen": selected_c_pen},
+        steady=steady,
+        metric="p_expert",
     )
     heatmaps = [
-        (h1, "μ<sub>E</sub>", "c<sub>pen</sub>", "fixed d<sub>T</sub>", selected_mu, selected_c_pen),
-        (h2, "d<sub>T</sub>", "c<sub>pen</sub>", "fixed μ<sub>E</sub>", selected_d, selected_c_pen),
-        (h3, "d<sub>T</sub>", "μ<sub>E</sub>", "fixed c<sub>pen</sub>", selected_d, selected_mu),
+        (
+            h1,
+            "μ<sub>E</sub>",
+            "c<sub>pen</sub>",
+            "fixed d<sub>T</sub>",
+            selected_mu,
+            selected_c_pen,
+        ),
+        (
+            h2,
+            "d<sub>T</sub>",
+            "c<sub>pen</sub>",
+            "fixed μ<sub>E</sub>",
+            selected_d,
+            selected_c_pen,
+        ),
+        (
+            h3,
+            "d<sub>T</sub>",
+            "μ<sub>E</sub>",
+            "fixed c<sub>pen</sub>",
+            selected_d,
+            selected_mu,
+        ),
     ]
     main_figs = []
     for data, xlab, ylab, title, sx, sy in heatmaps:
         if not data.empty:
             main_figs.append(
                 plotting.parameter_paradox_heatmap_figure(
-                    data, x_label=xlab, y_label=ylab,
+                    data,
+                    x_label=xlab,
+                    y_label=ylab,
                     title=title,
-                    selected_x=sx, selected_y=sy,
+                    selected_x=sx,
+                    selected_y=sy,
                 )
             )
     if main_figs:
         st.subheader("Parameter landscape heatmaps")
         st.markdown(
             "Color = mean p(Expert); white numbers = accuracy gap (Expert − Peers); "
-            "white outlines = fragility regions (Expert more accurate yet p(Expert) < 0.5); "
-            "black outline = the selected condition below."
+            "elevated areas = fragility regions (Expert more accurate yet p(Expert) < 0.5); "
+            "dark outline = the selected condition below."
         )
         for fig in main_figs:
             st.plotly_chart(fig, use_container_width=True)
@@ -186,29 +263,72 @@ def render_extension_page(study: str):
             format_func=lambda m: plotting.METRIC_LABELS.get(m, m),
         )
         e1 = loaders.extension_heatmap_cells(
-            study, feedback, "cyclic", x_var="mu_e", y_var="c_pen",
-            fixed={"expert_inertia_divisor": selected_d}, steady=steady, metric=metric,
+            study,
+            feedback,
+            "cyclic",
+            x_var="mu_e",
+            y_var="c_pen",
+            fixed={"expert_inertia_divisor": selected_d},
+            steady=steady,
+            metric=metric,
         )
         e2 = loaders.extension_heatmap_cells(
-            study, feedback, "cyclic", x_var="expert_inertia_divisor", y_var="c_pen",
-            fixed={"mu_e": selected_mu}, steady=steady, metric=metric,
+            study,
+            feedback,
+            "cyclic",
+            x_var="expert_inertia_divisor",
+            y_var="c_pen",
+            fixed={"mu_e": selected_mu},
+            steady=steady,
+            metric=metric,
         )
         e3 = loaders.extension_heatmap_cells(
-            study, feedback, "cyclic", x_var="expert_inertia_divisor", y_var="mu_e",
-            fixed={"c_pen": selected_c_pen}, steady=steady, metric=metric,
+            study,
+            feedback,
+            "cyclic",
+            x_var="expert_inertia_divisor",
+            y_var="mu_e",
+            fixed={"c_pen": selected_c_pen},
+            steady=steady,
+            metric=metric,
         )
         metric_figs = []
         for data, xlab, ylab, title, sx, sy in [
-            (e1, "μ<sub>E</sub>", "c<sub>pen</sub>", "fixed d<sub>T</sub>", selected_mu, selected_c_pen),
-            (e2, "d<sub>T</sub>", "c<sub>pen</sub>", "fixed μ<sub>E</sub>", selected_d, selected_c_pen),
-            (e3, "d<sub>T</sub>", "μ<sub>E</sub>", "fixed c<sub>pen</sub>", selected_d, selected_mu),
+            (
+                e1,
+                "μ<sub>E</sub>",
+                "c<sub>pen</sub>",
+                "fixed d<sub>T</sub>",
+                selected_mu,
+                selected_c_pen,
+            ),
+            (
+                e2,
+                "d<sub>T</sub>",
+                "c<sub>pen</sub>",
+                "fixed μ<sub>E</sub>",
+                selected_d,
+                selected_c_pen,
+            ),
+            (
+                e3,
+                "d<sub>T</sub>",
+                "μ<sub>E</sub>",
+                "fixed c<sub>pen</sub>",
+                selected_d,
+                selected_mu,
+            ),
         ]:
             if not data.empty:
                 metric_figs.append(
                     plotting.parameter_metric_heatmap_figure(
-                        data, x_label=xlab, y_label=ylab, metric=metric,
+                        data,
+                        x_label=xlab,
+                        y_label=ylab,
+                        metric=metric,
                         title=title,
-                        selected_x=sx, selected_y=sy,
+                        selected_x=sx,
+                        selected_y=sy,
                     )
                 )
         if metric_figs:
@@ -229,8 +349,14 @@ def render_extension_page(study: str):
                 "full": dyn["mean_p_expert"].mean(),
             },
             "trust": {
-                "steady": (ss["mean_trust_expert"].mean(), ss["mean_trust_peers"].mean()),
-                "full": (dyn["mean_trust_expert"].mean(), dyn["mean_trust_peers"].mean()),
+                "steady": (
+                    ss["mean_trust_expert"].mean(),
+                    ss["mean_trust_peers"].mean(),
+                ),
+                "full": (
+                    dyn["mean_trust_expert"].mean(),
+                    dyn["mean_trust_peers"].mean(),
+                ),
             },
             "accuracy": {
                 "steady": (ss["mean_acc_expert"].mean(), ss["mean_acc_peers"].mean()),
@@ -239,7 +365,8 @@ def render_extension_page(study: str):
         }
         st.plotly_chart(
             plotting.trajectory_figure(
-                dyn, "trust",
+                dyn,
+                "trust",
                 title="Trust",
                 stats=stats["trust"],
             ),
@@ -247,7 +374,8 @@ def render_extension_page(study: str):
         )
         st.plotly_chart(
             plotting.trajectory_figure(
-                dyn, "accuracy",
+                dyn,
+                "accuracy",
                 title="Accuracy",
                 stats=stats["accuracy"],
             ),
@@ -255,7 +383,8 @@ def render_extension_page(study: str):
         )
         st.plotly_chart(
             plotting.trajectory_figure(
-                dyn, "p_expert",
+                dyn,
+                "p_expert",
                 title="p(Expert)",
                 stats=stats["p_expert"],
             ),
@@ -283,6 +412,9 @@ def render_extension_page(study: str):
                     ("Post-collapse trust", "Expert/Peers = 0.1/0.9"),
                 ],
             )
-    st.plotly_chart(hysteresis_trajectory_figure(traj, meta, model_name, feedback, hyst_regime), use_container_width=True)
+    st.plotly_chart(
+        hysteresis_trajectory_figure(traj, meta, model_name, feedback, hyst_regime),
+        use_container_width=True,
+    )
     with st.expander("Steady-state summary values"):
         st.dataframe(summary)

@@ -111,8 +111,8 @@ Current full local ingest row counts:
 
 1. =1_Base_Model.py=
    - Paper-aligned base-model page.
-   - Shows D1 p(Expert) heatmap with accuracy-gap text, paradox cell outlines,
-     and red outline for the currently selected condition.
+   - Shows D1 p(Expert) heatmap with accuracy-gap text, paradox cell outlines (heightend cells with dropshadows),
+     and darkgrey outline for the currently selected condition.
    - Selected =mu_E= and =c_pen= are sidebar controls; downstream dynamics update
      to the selected cell.
    - Dynamic error-locked trust traces are computed from the selected condition's

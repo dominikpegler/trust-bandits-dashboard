@@ -79,8 +79,8 @@ with st.sidebar:
 st.subheader("Parameter landscape heatmaps")
 st.markdown(
     "Color = mean p(Expert); white numbers = accuracy gap (Expert − Peers); "
-    "white outlines = fragility regions (Expert more accurate yet p(Expert) < 0.5); "
-    "black outline = the selected condition below."
+    "elevated areas = fragility regions (Expert more accurate yet p(Expert) < 0.5); "
+    "dark outline = the selected condition below."
 )
 st.plotly_chart(
     plotting.base_paradox_heatmap_figure(heat, feedback, selected_mu, selected_c_pen),
@@ -161,9 +161,7 @@ if d2.empty or d3.empty:
         "D2/D3 data are missing. Run a full ingest to load base-model support tables."
     )
 else:
-    st.plotly_chart(
-        plotting.source_accuracy_by_mu_figure(d2), use_container_width=True
-    )
+    st.plotly_chart(plotting.source_accuracy_by_mu_figure(d2), use_container_width=True)
     st.plotly_chart(
         plotting.choice_area_ci_figure(
             d2,

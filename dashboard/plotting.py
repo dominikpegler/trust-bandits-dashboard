@@ -298,7 +298,9 @@ def _add_paradox_shadow(
                 )
 
 
-def _add_paradox_boundaries(fig: go.Figure, mask: np.ndarray) -> None:
+def _add_paradox_boundaries(
+    fig: go.Figure, mask: np.ndarray, color: str = "black", width: float = 1.0
+) -> None:
     """Draw a white line on each fragility-cell edge that borders a non-fragility
     cell (or the grid edge), outlining each fragility region without internal lines."""
     n_rows, n_cols = mask.shape
@@ -316,7 +318,7 @@ def _add_paradox_boundaries(fig: go.Figure, mask: np.ndarray) -> None:
                     y0=i - 0.5,
                     x1=j + 0.5,
                     y1=i - 0.5,
-                    line=dict(color="white", width=1.5),
+                    line=dict(color=color, width=width),
                 )
             # bottom edge
             if i == n_rows - 1 or not mask[i + 1, j]:
@@ -328,7 +330,7 @@ def _add_paradox_boundaries(fig: go.Figure, mask: np.ndarray) -> None:
                     y0=i + 0.5,
                     x1=j + 0.5,
                     y1=i + 0.5,
-                    line=dict(color="white", width=1.5),
+                    line=dict(color=color, width=width),
                 )
             # left edge
             if j == 0 or not mask[i, j - 1]:
@@ -340,7 +342,7 @@ def _add_paradox_boundaries(fig: go.Figure, mask: np.ndarray) -> None:
                     y0=i - 0.5,
                     x1=j - 0.5,
                     y1=i + 0.5,
-                    line=dict(color="white", width=1.5),
+                    line=dict(color=color, width=width),
                 )
             # right edge
             if j == n_cols - 1 or not mask[i, j + 1]:
@@ -352,8 +354,25 @@ def _add_paradox_boundaries(fig: go.Figure, mask: np.ndarray) -> None:
                     y0=i - 0.5,
                     x1=j + 0.5,
                     y1=i + 0.5,
-                    line=dict(color="white", width=1.5),
+                    line=dict(color=color, width=width),
                 )
+
+
+def rounded_rect_path(x0, y0, x1, y1, radius):
+    """Build an SVG path string for a rectangle with rounded corners."""
+    r = radius
+    return (
+        f"M {x0+r},{y0} "
+        f"L {x1-r},{y0} "
+        f"Q {x1},{y0} {x1},{y0+r} "
+        f"L {x1},{y1-r} "
+        f"Q {x1},{y1} {x1-r},{y1} "
+        f"L {x0+r},{y1} "
+        f"Q {x0},{y1} {x0},{y1-r} "
+        f"L {x0},{y0+r} "
+        f"Q {x0},{y0} {x0+r},{y0} "
+        f"Z"
+    )
 
 
 def base_paradox_heatmap_figure(
@@ -365,8 +384,8 @@ def base_paradox_heatmap_figure(
     """Paper-style base-model D1 heatmap.
 
     Color encodes p(Expert), text encodes accuracy gap Expert - Peers,
-    white outlines mark paradox cells, and the red outline marks the
-    representative condition used for dynamics.
+    elevated areas mark paradox cells, and the dark gray outline marks the
+    selected condition used for dynamics.
     """
     if df.empty:
         fig = go.Figure()
@@ -434,17 +453,32 @@ def base_paradox_heatmap_figure(
         if np.isclose(row["mu_e"], representative_mu) and np.isclose(
             row["c_pen"], representative_c_pen
         ):
+
+            # regular rectangle
+            # fig.add_shape(
+            #     type="rect",
+            #     xref="x",
+            #     yref="y",
+            #     x0=x - 0.6,
+            #     x1=x + 0.6,
+            #     y0=y - 0.6,
+            #     y1=y + 0.6,
+            #     line=dict(color="#1f1f1f", width=2),
+            #     fillcolor="rgba(0,0,0,0)",
+            # )
+
+            # rectangle w/ rounded corners
             fig.add_shape(
-                type="rect",
+                type="path",
                 xref="x",
                 yref="y",
-                x0=x - 0.52,
-                x1=x + 0.52,
-                y0=y - 0.52,
-                y1=y + 0.52,
-                line=dict(color="#1f1f1f", width=2.5),
+                path=rounded_rect_path(
+                    x - 0.44, y - 0.44, x + 0.44, y + 0.44, radius=0.18
+                ),
+                line=dict(color="#4f4f4f", width=2.5),
                 fillcolor="rgba(0,0,0,0)",
             )
+
     fig.update_layout(
         title="",
         xaxis_title="Evidence strength (μ<sub>E</sub>)",
@@ -536,17 +570,30 @@ def parameter_paradox_heatmap_figure(
             and np.isclose(row["x"], selected_x)
             and np.isclose(row["y"], selected_y)
         ):
+            # fig.add_shape(
+            #     type="rect",
+            #     xref="x",
+            #     yref="y",
+            #     x0=x - 0.52,
+            #     x1=x + 0.52,
+            #     y0=y - 0.52,
+            #     y1=y + 0.52,
+            #     line=dict(color="#3f3f3f", width=3.0),
+            #     fillcolor="rgba(0,0,0,0)",
+            # )
+
+            # rectangle w/ rounded corners
             fig.add_shape(
-                type="rect",
+                type="path",
                 xref="x",
                 yref="y",
-                x0=x - 0.52,
-                x1=x + 0.52,
-                y0=y - 0.52,
-                y1=y + 0.52,
-                line=dict(color="#1f1f1f", width=2.5),
+                path=rounded_rect_path(
+                    x - 0.44, y - 0.44, x + 0.44, y + 0.44, radius=0.18
+                ),
+                line=dict(color="#4f4f4f", width=2.5),
                 fillcolor="rgba(0,0,0,0)",
             )
+
     fig.update_layout(
         title=title,
         xaxis_title=x_label,
@@ -624,17 +671,29 @@ def parameter_metric_heatmap_figure(
             if np.isclose(row["x"], selected_x) and np.isclose(row["y"], selected_y):
                 x = x_vals.index(row["x"])
                 y = y_vals.index(row["y"])
+                # fig.add_shape(
+                #     type="rect",
+                #     xref="x",
+                #     yref="y",
+                #     x0=x - 0.52,
+                #     x1=x + 0.52,
+                #     y0=y - 0.52,
+                #     y1=y + 0.52,
+                #     line=dict(color="#1f1f1f", width=2.5),
+                #     fillcolor="rgba(0,0,0,0)",
+                # )
+                # rectangle w/ rounded corners
                 fig.add_shape(
-                    type="rect",
+                    type="path",
                     xref="x",
                     yref="y",
-                    x0=x - 0.52,
-                    x1=x + 0.52,
-                    y0=y - 0.52,
-                    y1=y + 0.52,
-                    line=dict(color="#1f1f1f", width=2.5),
+                    path=rounded_rect_path(
+                        x - 0.44, y - 0.44, x + 0.44, y + 0.44, radius=0.18
+                    ),
+                    line=dict(color="#4f4f4f", width=2.5),
                     fillcolor="rgba(0,0,0,0)",
                 )
+
     fig.update_layout(
         title=title,
         xaxis_title=x_label,
