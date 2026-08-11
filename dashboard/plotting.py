@@ -1,4 +1,5 @@
 """Plotly adapters for the dashboard. Reuses the paper's color scheme."""
+
 from __future__ import annotations
 
 import numpy as np
@@ -19,7 +20,7 @@ HEATMAP_ALPHA = 0.86
 # Drop-shadow cast by fragility regions onto their neighbors, giving the
 # regions a "raised" look. offset is the strip thickness in cell units;
 # opacity is the shadow darkness.
-PARADOX_SHADOW_OFFSET = 0.15
+PARADOX_SHADOW_OFFSET = 0.1
 PARADOX_SHADOW_OPACITY = 0.28
 
 METRIC_LABELS = {
@@ -98,6 +99,7 @@ def md_mathify(s: str) -> str:
         s = s.replace(k, v)
     return s
 
+
 # Source-aware metric -> the source whose color should dominate.
 SOURCE_OF_METRIC = {
     "p_expert": None,  # bipolar: Peers at low values, Expert at high values
@@ -112,7 +114,7 @@ def _blend_white(hex_color: str, alpha: float = HEATMAP_ALPHA) -> str:
     """Blend a hex color toward white by `alpha` (0..1), like the paper's
     `LinearSegmentedColormap.from_list([color+aa, ...])` over a white figure."""
     c = hex_color.lstrip("#")
-    r, g, b = (int(c[i:i + 2], 16) for i in (0, 2, 4))
+    r, g, b = (int(c[i : i + 2], 16) for i in (0, 2, 4))
     r = int(round(alpha * r + (1 - alpha) * 255))
     g = int(round(alpha * g + (1 - alpha) * 255))
     b = int(round(alpha * b + (1 - alpha) * 255))
@@ -125,7 +127,7 @@ def _source_hex(source: str) -> str:
 
 def _source_rgba(source: str, alpha: float) -> str:
     c = _source_hex(source).lstrip("#")
-    r, g, b = (int(c[i:i + 2], 16) for i in (0, 2, 4))
+    r, g, b = (int(c[i : i + 2], 16) for i in (0, 2, 4))
     return f"rgba({r},{g},{b},{alpha})"
 
 
@@ -250,21 +252,49 @@ def _add_paradox_shadow(
         for j in range(n_cols):
             if not mask[i, j]:
                 continue
-            # bottom strip: shadow cast onto the cell below, only where the
-            # region's outer boundary runs (matching the white outline)
-            if i == n_rows - 1 or not mask[i + 1, j]:
+            # The shadow is the region translated down-right by `offset`, minus
+            # the region itself. Each translated cell splits into four
+            # quadrants; we draw only the quadrants that land on non-fragility
+            # cells. The top-left quadrant (inside cell (i,j)) is always
+            # dropped, so the region's own cells are never darkened. The
+            # right/bottom quadrants are inset by `offset` from the cell's own
+            # edges, so adjacent cells' shadows meet edge-to-edge with no
+            # overlap and no double-darkening along straight boundaries.
+            if j + 1 < n_cols and not mask[i, j + 1]:
                 fig.add_shape(
-                    type="rect", xref="x", yref="y",
-                    x0=j - 0.5, x1=j + 0.5, y0=i + 0.5, y1=i + 0.5 + offset,
-                    fillcolor=fill, line=dict(width=0),
+                    type="rect",
+                    xref="x",
+                    yref="y",
+                    x0=j + 0.5,
+                    x1=j + 0.5 + offset,
+                    y0=i - 0.5 + offset,
+                    y1=i + 0.5,
+                    fillcolor=fill,
+                    line=dict(width=0),
                 )
-            # right strip: shadow cast onto the cell to the right, only where
-            # the region's outer boundary runs (matching the white outline)
-            if j == n_cols - 1 or not mask[i, j + 1]:
+            if i + 1 < n_rows and not mask[i + 1, j]:
                 fig.add_shape(
-                    type="rect", xref="x", yref="y",
-                    x0=j + 0.5, x1=j + 0.5 + offset, y0=i - 0.5, y1=i + 0.5,
-                    fillcolor=fill, line=dict(width=0),
+                    type="rect",
+                    xref="x",
+                    yref="y",
+                    x0=j - 0.5 + offset,
+                    x1=j + 0.5,
+                    y0=i + 0.5,
+                    y1=i + 0.5 + offset,
+                    fillcolor=fill,
+                    line=dict(width=0),
+                )
+            if i + 1 < n_rows and j + 1 < n_cols and not mask[i + 1, j + 1]:
+                fig.add_shape(
+                    type="rect",
+                    xref="x",
+                    yref="y",
+                    x0=j + 0.5,
+                    x1=j + 0.5 + offset,
+                    y0=i + 0.5,
+                    y1=i + 0.5 + offset,
+                    fillcolor=fill,
+                    line=dict(width=0),
                 )
 
 
@@ -278,24 +308,52 @@ def _add_paradox_boundaries(fig: go.Figure, mask: np.ndarray) -> None:
                 continue
             # top edge
             if i == 0 or not mask[i - 1, j]:
-                fig.add_shape(type="line", xref="x", yref="y",
-                              x0=j - 0.5, y0=i - 0.5, x1=j + 0.5, y1=i - 0.5,
-                              line=dict(color="white", width=1.5))
+                fig.add_shape(
+                    type="line",
+                    xref="x",
+                    yref="y",
+                    x0=j - 0.5,
+                    y0=i - 0.5,
+                    x1=j + 0.5,
+                    y1=i - 0.5,
+                    line=dict(color="white", width=1.5),
+                )
             # bottom edge
             if i == n_rows - 1 or not mask[i + 1, j]:
-                fig.add_shape(type="line", xref="x", yref="y",
-                              x0=j - 0.5, y0=i + 0.5, x1=j + 0.5, y1=i + 0.5,
-                              line=dict(color="white", width=1.5))
+                fig.add_shape(
+                    type="line",
+                    xref="x",
+                    yref="y",
+                    x0=j - 0.5,
+                    y0=i + 0.5,
+                    x1=j + 0.5,
+                    y1=i + 0.5,
+                    line=dict(color="white", width=1.5),
+                )
             # left edge
             if j == 0 or not mask[i, j - 1]:
-                fig.add_shape(type="line", xref="x", yref="y",
-                              x0=j - 0.5, y0=i - 0.5, x1=j - 0.5, y1=i + 0.5,
-                              line=dict(color="white", width=1.5))
+                fig.add_shape(
+                    type="line",
+                    xref="x",
+                    yref="y",
+                    x0=j - 0.5,
+                    y0=i - 0.5,
+                    x1=j - 0.5,
+                    y1=i + 0.5,
+                    line=dict(color="white", width=1.5),
+                )
             # right edge
             if j == n_cols - 1 or not mask[i, j + 1]:
-                fig.add_shape(type="line", xref="x", yref="y",
-                              x0=j + 0.5, y0=i - 0.5, x1=j + 0.5, y1=i + 0.5,
-                              line=dict(color="white", width=1.5))
+                fig.add_shape(
+                    type="line",
+                    xref="x",
+                    yref="y",
+                    x0=j + 0.5,
+                    y0=i - 0.5,
+                    x1=j + 0.5,
+                    y1=i + 0.5,
+                    line=dict(color="white", width=1.5),
+                )
 
 
 def base_paradox_heatmap_figure(
@@ -316,14 +374,28 @@ def base_paradox_heatmap_figure(
         return fig
     mu_vals = sorted(df["mu_e"].unique())
     pen_vals = sorted(df["c_pen"].unique(), reverse=True)
-    pivot = df.pivot(index="c_pen", columns="mu_e", values="mean_p_expert").loc[pen_vals, mu_vals]
-    delta = df.pivot(index="c_pen", columns="mu_e", values="delta_acc").loc[pen_vals, mu_vals]
-    acc_e = df.pivot(index="c_pen", columns="mu_e", values="mean_acc_expert").loc[pen_vals, mu_vals]
-    acc_p = df.pivot(index="c_pen", columns="mu_e", values="mean_acc_peers").loc[pen_vals, mu_vals]
-    paradox = df.pivot(index="c_pen", columns="mu_e", values="is_paradox").loc[pen_vals, mu_vals].astype(bool)
+    pivot = df.pivot(index="c_pen", columns="mu_e", values="mean_p_expert").loc[
+        pen_vals, mu_vals
+    ]
+    delta = df.pivot(index="c_pen", columns="mu_e", values="delta_acc").loc[
+        pen_vals, mu_vals
+    ]
+    acc_e = df.pivot(index="c_pen", columns="mu_e", values="mean_acc_expert").loc[
+        pen_vals, mu_vals
+    ]
+    acc_p = df.pivot(index="c_pen", columns="mu_e", values="mean_acc_peers").loc[
+        pen_vals, mu_vals
+    ]
+    paradox = (
+        df.pivot(index="c_pen", columns="mu_e", values="is_paradox")
+        .loc[pen_vals, mu_vals]
+        .astype(bool)
+    )
     mu_matrix = np.tile(np.array(mu_vals), (len(pen_vals), 1))
     pen_matrix = np.tile(np.array(pen_vals).reshape(-1, 1), (1, len(mu_vals)))
-    custom = np.dstack([mu_matrix, pen_matrix, acc_e.values, acc_p.values, delta.values])
+    custom = np.dstack(
+        [mu_matrix, pen_matrix, acc_e.values, acc_p.values, delta.values]
+    )
     x_pos = list(range(len(mu_vals)))
     y_pos = list(range(len(pen_vals)))
     fig = go.Figure(
@@ -331,7 +403,10 @@ def base_paradox_heatmap_figure(
             z=pivot.values,
             x=x_pos,
             y=y_pos,
-            colorscale=[[0.0, _blend_white(COLOR_PEERS)], [1.0, _blend_white(COLOR_EXPERT)]],
+            colorscale=[
+                [0.0, _blend_white(COLOR_PEERS)],
+                [1.0, _blend_white(COLOR_EXPERT)],
+            ],
             zmin=0,
             zmax=1,
             text=[[f"{v:+.2f}" for v in row] for row in delta.values],
@@ -356,18 +431,35 @@ def base_paradox_heatmap_figure(
     for _, row in df.iterrows():
         x = mu_vals.index(row["mu_e"])
         y = pen_vals.index(row["c_pen"])
-        if np.isclose(row["mu_e"], representative_mu) and np.isclose(row["c_pen"], representative_c_pen):
+        if np.isclose(row["mu_e"], representative_mu) and np.isclose(
+            row["c_pen"], representative_c_pen
+        ):
             fig.add_shape(
-                type="rect", xref="x", yref="y",
-                x0=x - 0.52, x1=x + 0.52, y0=y - 0.52, y1=y + 0.52,
-                line=dict(color="#1f1f1f", width=2.5), fillcolor="rgba(0,0,0,0)",
+                type="rect",
+                xref="x",
+                yref="y",
+                x0=x - 0.52,
+                x1=x + 0.52,
+                y0=y - 0.52,
+                y1=y + 0.52,
+                line=dict(color="#1f1f1f", width=2.5),
+                fillcolor="rgba(0,0,0,0)",
             )
     fig.update_layout(
         title="",
         xaxis_title="Evidence strength (μ<sub>E</sub>)",
         yaxis_title="Asymmetric penalty (c<sub>pen</sub>)",
-        xaxis=dict(tickmode="array", tickvals=x_pos, ticktext=[f"{x:.3g}" for x in mu_vals]),
-        yaxis=dict(tickmode="array", tickvals=y_pos, ticktext=[f"{y:.3g}" for y in pen_vals], autorange="reversed", scaleanchor="x", scaleratio=1),
+        xaxis=dict(
+            tickmode="array", tickvals=x_pos, ticktext=[f"{x:.3g}" for x in mu_vals]
+        ),
+        yaxis=dict(
+            tickmode="array",
+            tickvals=y_pos,
+            ticktext=[f"{y:.3g}" for y in pen_vals],
+            autorange="reversed",
+            scaleanchor="x",
+            scaleratio=1,
+        ),
         height=700,
         margin=dict(l=70, r=20, t=20, b=60),
     )
@@ -391,9 +483,17 @@ def parameter_paradox_heatmap_figure(
     y_vals = sorted(df["y"].unique(), reverse=True)
     pivot = df.pivot(index="y", columns="x", values="value").loc[y_vals, x_vals]
     delta = df.pivot(index="y", columns="x", values="delta_acc").loc[y_vals, x_vals]
-    acc_e = df.pivot(index="y", columns="x", values="mean_acc_expert_ss").loc[y_vals, x_vals]
-    acc_p = df.pivot(index="y", columns="x", values="mean_acc_peers_ss").loc[y_vals, x_vals]
-    paradox = df.pivot(index="y", columns="x", values="is_paradox").loc[y_vals, x_vals].astype(bool)
+    acc_e = df.pivot(index="y", columns="x", values="mean_acc_expert_ss").loc[
+        y_vals, x_vals
+    ]
+    acc_p = df.pivot(index="y", columns="x", values="mean_acc_peers_ss").loc[
+        y_vals, x_vals
+    ]
+    paradox = (
+        df.pivot(index="y", columns="x", values="is_paradox")
+        .loc[y_vals, x_vals]
+        .astype(bool)
+    )
     x_matrix = np.tile(np.array(x_vals), (len(y_vals), 1))
     y_matrix = np.tile(np.array(y_vals).reshape(-1, 1), (1, len(x_vals)))
     custom = np.dstack([x_matrix, y_matrix, acc_e.values, acc_p.values, delta.values])
@@ -402,7 +502,10 @@ def parameter_paradox_heatmap_figure(
             z=pivot.values,
             x=list(range(len(x_vals))),
             y=list(range(len(y_vals))),
-            colorscale=[[0.0, _blend_white(COLOR_PEERS)], [1.0, _blend_white(COLOR_EXPERT)]],
+            colorscale=[
+                [0.0, _blend_white(COLOR_PEERS)],
+                [1.0, _blend_white(COLOR_EXPERT)],
+            ],
             zmin=0,
             zmax=1,
             text=[[f"{v:+.2f}" for v in row] for row in delta.values],
@@ -427,18 +530,40 @@ def parameter_paradox_heatmap_figure(
     for _, row in df.iterrows():
         x = x_vals.index(row["x"])
         y = y_vals.index(row["y"])
-        if selected_x is not None and selected_y is not None and np.isclose(row["x"], selected_x) and np.isclose(row["y"], selected_y):
+        if (
+            selected_x is not None
+            and selected_y is not None
+            and np.isclose(row["x"], selected_x)
+            and np.isclose(row["y"], selected_y)
+        ):
             fig.add_shape(
-                type="rect", xref="x", yref="y",
-                x0=x - 0.52, x1=x + 0.52, y0=y - 0.52, y1=y + 0.52,
-                line=dict(color="#1f1f1f", width=2.5), fillcolor="rgba(0,0,0,0)",
+                type="rect",
+                xref="x",
+                yref="y",
+                x0=x - 0.52,
+                x1=x + 0.52,
+                y0=y - 0.52,
+                y1=y + 0.52,
+                line=dict(color="#1f1f1f", width=2.5),
+                fillcolor="rgba(0,0,0,0)",
             )
     fig.update_layout(
         title=title,
         xaxis_title=x_label,
         yaxis_title=y_label,
-        xaxis=dict(tickmode="array", tickvals=list(range(len(x_vals))), ticktext=[f"{v:.3g}" for v in x_vals]),
-        yaxis=dict(tickmode="array", tickvals=list(range(len(y_vals))), ticktext=[f"{v:.3g}" for v in y_vals], autorange="reversed", scaleanchor="x", scaleratio=1),
+        xaxis=dict(
+            tickmode="array",
+            tickvals=list(range(len(x_vals))),
+            ticktext=[f"{v:.3g}" for v in x_vals],
+        ),
+        yaxis=dict(
+            tickmode="array",
+            tickvals=list(range(len(y_vals))),
+            ticktext=[f"{v:.3g}" for v in y_vals],
+            autorange="reversed",
+            scaleanchor="x",
+            scaleratio=1,
+        ),
         height=700,
         margin=dict(l=60, r=20, t=60 if title else 20, b=60),
     )
@@ -464,7 +589,10 @@ def parameter_metric_heatmap_figure(
     pivot = df.pivot(index="y", columns="x", values="value").loc[y_vals, x_vals]
     source = SOURCE_OF_METRIC.get(metric)
     if source is None:
-        colorscale = [[0.0, _blend_white(COLOR_PEERS)], [1.0, _blend_white(COLOR_EXPERT)]]
+        colorscale = [
+            [0.0, _blend_white(COLOR_PEERS)],
+            [1.0, _blend_white(COLOR_EXPERT)],
+        ]
     else:
         base = _source_hex(source)
         colorscale = [[0.0, _blend_white(base, alpha=0.15)], [1.0, _blend_white(base)]]
@@ -479,10 +607,12 @@ def parameter_metric_heatmap_figure(
             text=[[f"{v:.2f}" for v in row] for row in pivot.values],
             texttemplate="%{text}",
             colorbar=dict(title=METRIC_LABELS.get(metric, metric), len=0.5),
-            customdata=np.dstack([
-                np.tile(np.array(x_vals), (len(y_vals), 1)),
-                np.tile(np.array(y_vals).reshape(-1, 1), (1, len(x_vals))),
-            ]),
+            customdata=np.dstack(
+                [
+                    np.tile(np.array(x_vals), (len(y_vals), 1)),
+                    np.tile(np.array(y_vals).reshape(-1, 1), (1, len(x_vals))),
+                ]
+            ),
             hovertemplate=(
                 f"{x_label}=%{{customdata[0]:.3g}}<br>{y_label}=%{{customdata[1]:.3g}}<br>"
                 f"{METRIC_LABELS.get(metric, metric)}=%{{z:.3f}}<extra></extra>"
@@ -495,16 +625,33 @@ def parameter_metric_heatmap_figure(
                 x = x_vals.index(row["x"])
                 y = y_vals.index(row["y"])
                 fig.add_shape(
-                    type="rect", xref="x", yref="y",
-                    x0=x - 0.52, x1=x + 0.52, y0=y - 0.52, y1=y + 0.52,
-                    line=dict(color="#1f1f1f", width=2.5), fillcolor="rgba(0,0,0,0)",
+                    type="rect",
+                    xref="x",
+                    yref="y",
+                    x0=x - 0.52,
+                    x1=x + 0.52,
+                    y0=y - 0.52,
+                    y1=y + 0.52,
+                    line=dict(color="#1f1f1f", width=2.5),
+                    fillcolor="rgba(0,0,0,0)",
                 )
     fig.update_layout(
         title=title,
         xaxis_title=x_label,
         yaxis_title=y_label,
-        xaxis=dict(tickmode="array", tickvals=list(range(len(x_vals))), ticktext=[f"{v:.3g}" for v in x_vals]),
-        yaxis=dict(tickmode="array", tickvals=list(range(len(y_vals))), ticktext=[f"{v:.3g}" for v in y_vals], autorange="reversed", scaleanchor="x", scaleratio=1),
+        xaxis=dict(
+            tickmode="array",
+            tickvals=list(range(len(x_vals))),
+            ticktext=[f"{v:.3g}" for v in x_vals],
+        ),
+        yaxis=dict(
+            tickmode="array",
+            tickvals=list(range(len(y_vals))),
+            ticktext=[f"{v:.3g}" for v in y_vals],
+            autorange="reversed",
+            scaleanchor="x",
+            scaleratio=1,
+        ),
         height=700,
         margin=dict(l=60, r=20, t=60 if title else 20, b=60),
     )
@@ -531,11 +678,21 @@ def source_accuracy_by_mu_figure(df: pd.DataFrame) -> go.Figure:
         ("acc_peers", "Peers accuracy", "peers"),
     ):
         s = _summary_ci(df, "mu_e", value_col)
-        fig.add_trace(go.Scatter(
-            x=s["mu_e"], y=s["mean"], mode="lines+markers", name=name,
-            line=dict(color=_source_hex(src), width=2),
-            error_y=dict(type="data", array=s["ci"], visible=True, color=_source_rgba(src, 0.3)),
-        ))
+        fig.add_trace(
+            go.Scatter(
+                x=s["mu_e"],
+                y=s["mean"],
+                mode="lines+markers",
+                name=name,
+                line=dict(color=_source_hex(src), width=2),
+                error_y=dict(
+                    type="data",
+                    array=s["ci"],
+                    visible=True,
+                    color=_source_rgba(src, 0.3),
+                ),
+            )
+        )
     fig.update_layout(
         title="Source accuracy by evidence strength",
         xaxis_title="Evidence strength (μ<sub>E</sub>)",
@@ -548,46 +705,85 @@ def source_accuracy_by_mu_figure(df: pd.DataFrame) -> go.Figure:
     return fig
 
 
-def choice_area_ci_figure(df: pd.DataFrame, x_col: str, title: str, x_label: str) -> go.Figure:
+def choice_area_ci_figure(
+    df: pd.DataFrame, x_col: str, title: str, x_label: str
+) -> go.Figure:
     s = _summary_ci(df, x_col, "p_expert")
     fig = go.Figure()
     x = s[x_col].to_numpy()
-    fig.add_trace(go.Scatter(
-        x=list(x) + list(x[::-1]),
-        y=list(s["lo"]) + list(np.zeros(len(s))[::-1]),
-        fill="toself", fillcolor=_source_rgba("expert", 0.60),
-        line=dict(color="rgba(0,0,0,0)"), name="p(Expert)", hoverinfo="skip",
-    ))
-    fig.add_trace(go.Scatter(
-        x=list(x) + list(x[::-1]),
-        y=list(s["mean"]) + list(s["lo"][::-1]),
-        fill="toself", fillcolor=_source_rgba("expert", 0.35),
-        line=dict(color="rgba(0,0,0,0)"), showlegend=False, hoverinfo="skip",
-    ))
-    fig.add_trace(go.Scatter(
-        x=list(x) + list(x[::-1]),
-        y=list(s["hi"]) + list(s["mean"][::-1]),
-        fill="toself", fillcolor=_source_rgba("peers", 0.35),
-        line=dict(color="rgba(0,0,0,0)"), showlegend=False, hoverinfo="skip",
-    ))
-    fig.add_trace(go.Scatter(
-        x=list(x) + list(x[::-1]),
-        y=list(np.ones(len(s))) + list(s["hi"][::-1]),
-        fill="toself", fillcolor=_source_rgba("peers", 0.60),
-        line=dict(color="rgba(0,0,0,0)"), name="p(Peers)", hoverinfo="skip",
-    ))
-    gap = df.assign(acc_gap=df["acc_expert"] - df["acc_peers"]).groupby(x_col)["acc_gap"].mean().reset_index()
-    fig.add_trace(go.Scatter(
-        x=gap[x_col], y=gap["acc_gap"], mode="lines+markers", name="Δ accuracy",
-        yaxis="y2", line=dict(color="gray", dash="dash", width=2),
-    ))
+    fig.add_trace(
+        go.Scatter(
+            x=list(x) + list(x[::-1]),
+            y=list(s["lo"]) + list(np.zeros(len(s))[::-1]),
+            fill="toself",
+            fillcolor=_source_rgba("expert", 0.60),
+            line=dict(color="rgba(0,0,0,0)"),
+            name="p(Expert)",
+            hoverinfo="skip",
+        )
+    )
+    fig.add_trace(
+        go.Scatter(
+            x=list(x) + list(x[::-1]),
+            y=list(s["mean"]) + list(s["lo"][::-1]),
+            fill="toself",
+            fillcolor=_source_rgba("expert", 0.35),
+            line=dict(color="rgba(0,0,0,0)"),
+            showlegend=False,
+            hoverinfo="skip",
+        )
+    )
+    fig.add_trace(
+        go.Scatter(
+            x=list(x) + list(x[::-1]),
+            y=list(s["hi"]) + list(s["mean"][::-1]),
+            fill="toself",
+            fillcolor=_source_rgba("peers", 0.35),
+            line=dict(color="rgba(0,0,0,0)"),
+            showlegend=False,
+            hoverinfo="skip",
+        )
+    )
+    fig.add_trace(
+        go.Scatter(
+            x=list(x) + list(x[::-1]),
+            y=list(np.ones(len(s))) + list(s["hi"][::-1]),
+            fill="toself",
+            fillcolor=_source_rgba("peers", 0.60),
+            line=dict(color="rgba(0,0,0,0)"),
+            name="p(Peers)",
+            hoverinfo="skip",
+        )
+    )
+    gap = (
+        df.assign(acc_gap=df["acc_expert"] - df["acc_peers"])
+        .groupby(x_col)["acc_gap"]
+        .mean()
+        .reset_index()
+    )
+    fig.add_trace(
+        go.Scatter(
+            x=gap[x_col],
+            y=gap["acc_gap"],
+            mode="lines+markers",
+            name="Δ accuracy",
+            yaxis="y2",
+            line=dict(color="gray", dash="dash", width=2),
+        )
+    )
     fig.add_hline(y=0.5, line_dash="dot", line_color="white")
     fig.update_layout(
         title=title,
         xaxis_title=x_label,
         yaxis_title="Choice probability",
         yaxis=dict(range=[0, 1]),
-        yaxis2=dict(title="Δ accuracy", overlaying="y", side="right", range=[-0.5, 0.5], showgrid=False),
+        yaxis2=dict(
+            title="Δ accuracy",
+            overlaying="y",
+            side="right",
+            range=[-0.5, 0.5],
+            showgrid=False,
+        ),
         height=420,
         margin=dict(l=60, r=60, t=60, b=80),
         legend=dict(orientation="h", yanchor="top", y=-0.15),
@@ -608,12 +804,21 @@ def error_locked_trust_figure(df: pd.DataFrame) -> go.Figure:
             .sort_values("offset")
         )
         ci = 1.96 * agg["sd"] / np.sqrt(agg["n"])
-        fig.add_trace(go.Scatter(
-            x=agg["offset"], y=agg["mean"], mode="lines", name=src,
-            line=dict(color=color, width=2),
-            error_y=dict(type="data", array=ci, visible=True,
-                         color=_source_rgba("expert" if src == "Expert" else "peers", 0.25)),
-        ))
+        fig.add_trace(
+            go.Scatter(
+                x=agg["offset"],
+                y=agg["mean"],
+                mode="lines",
+                name=src,
+                line=dict(color=color, width=2),
+                error_y=dict(
+                    type="data",
+                    array=ci,
+                    visible=True,
+                    color=_source_rgba("expert" if src == "Expert" else "peers", 0.25),
+                ),
+            )
+        )
     fig.add_vline(x=0, line_color="black", line_width=1)
     fig.add_hline(y=0, line_color="gray", line_dash="dot")
     fig.update_layout(
@@ -657,11 +862,17 @@ def trajectory_figure(
     if metric == "p_expert":
         fig.add_trace(
             go.Scatter(
-                x=df["trial"], y=df["mean_p_expert"],
-                mode="lines", name="p(Expert)",
+                x=df["trial"],
+                y=df["mean_p_expert"],
+                mode="lines",
+                name="p(Expert)",
                 line=dict(color=COLOR_EXPERT, width=2.5),
-                error_y=dict(type="data", array=_ci(df["sd_p_expert"], n_runs),
-                             visible=show_ci, color=_source_rgba("expert", 0.3)),
+                error_y=dict(
+                    type="data",
+                    array=_ci(df["sd_p_expert"], n_runs),
+                    visible=show_ci,
+                    color=_source_rgba("expert", 0.3),
+                ),
             )
         )
     elif metric == "trust":
@@ -672,10 +883,17 @@ def trajectory_figure(
             sd = df[col.replace("mean_", "sd_")]
             fig.add_trace(
                 go.Scatter(
-                    x=df["trial"], y=df[col], mode="lines", name=name,
+                    x=df["trial"],
+                    y=df[col],
+                    mode="lines",
+                    name=name,
                     line=dict(color=_source_hex(src), width=2.5),
-                    error_y=dict(type="data", array=_ci(sd, n_runs), visible=show_ci,
-                                 color=_source_rgba(src, 0.3)),
+                    error_y=dict(
+                        type="data",
+                        array=_ci(sd, n_runs),
+                        visible=show_ci,
+                        color=_source_rgba(src, 0.3),
+                    ),
                 )
             )
     elif metric == "accuracy":
@@ -686,10 +904,17 @@ def trajectory_figure(
             sd = df[col.replace("mean_", "sd_")]
             fig.add_trace(
                 go.Scatter(
-                    x=df["trial"], y=df[col], mode="lines", name=name,
+                    x=df["trial"],
+                    y=df[col],
+                    mode="lines",
+                    name=name,
                     line=dict(color=_source_hex(src), width=2.5),
-                    error_y=dict(type="data", array=_ci(sd, n_runs), visible=show_ci,
-                                 color=_source_rgba(src, 0.3)),
+                    error_y=dict(
+                        type="data",
+                        array=_ci(sd, n_runs),
+                        visible=show_ci,
+                        color=_source_rgba(src, 0.3),
+                    ),
                 )
             )
     if stats:
@@ -727,12 +952,20 @@ def _add_stats_annotation(fig: go.Figure, metric: str, stats: dict) -> None:
             f"{labels[1]}: SS <b>{_fmt(s1)}</b> / full {_fmt(f1)}",
         ]
     fig.add_annotation(
-        xref="paper", yref="paper", x=0.02, y=0.97, xanchor="left", yanchor="top",
+        xref="paper",
+        yref="paper",
+        x=0.02,
+        y=0.97,
+        xanchor="left",
+        yanchor="top",
         align="left",
         text="<br>".join(lines),
         showarrow=False,
         font=dict(size=12, color="#333"),
-        bordercolor="#999", borderwidth=1, borderpad=6, bgcolor="rgba(255,255,255,0.85)",
+        bordercolor="#999",
+        borderwidth=1,
+        borderpad=6,
+        bgcolor="rgba(255,255,255,0.85)",
     )
 
 
@@ -752,7 +985,8 @@ def d5_bifurcation_figure(
 
     n_rows, n_cols = len(clustering_levels), len(rho_levels)
     fig = make_subplots(
-        rows=n_rows, cols=n_cols,
+        rows=n_rows,
+        cols=n_cols,
         shared_yaxes=True,
         shared_xaxes=True,
         horizontal_spacing=0.025,
@@ -765,15 +999,18 @@ def d5_bifurcation_figure(
                 continue
             fig.add_trace(
                 go.Histogram(
-                    x=cell["value"], nbinsx=30,
+                    x=cell["value"],
+                    nbinsx=30,
                     marker=dict(color=_source_hex("expert"), opacity=0.7),
                     showlegend=False,
                 ),
-                row=i + 1, col=j + 1,
+                row=i + 1,
+                col=j + 1,
             )
             if metric == "p_expert":
-                fig.add_vline(x=0.5, line_dash="dash", line_color="red",
-                              row=i + 1, col=j + 1)
+                fig.add_vline(
+                    x=0.5, line_dash="dash", line_color="red", row=i + 1, col=j + 1
+                )
     for j, rho in enumerate(rho_levels):
         fig.add_annotation(
             text=f"ρ<sub>peer</sub>={rho:.2f}",
