@@ -535,6 +535,65 @@ def extension_heatmap_cells(
     return db.fetch_df(q, params)
 
 
+def base_metric_heatmap_cells(
+    study: str,
+    feedback_mode: str,
+    regime: str,
+    x_var: str,
+    y_var: str,
+    fixed: dict,
+    steady: bool = True,
+    metric: str = "p_expert",
+) -> pd.DataFrame:
+    """Cell-level base model heatmap data formatted like extension_heatmap_cells."""
+    # Get base model data
+    df = base_heatmap_cells(feedback_mode, steady=steady)
+    if df.empty:
+        return df
+    
+    # Map metric to the correct column
+    metric_map = {
+        "p_expert": "mean_p_expert",
+        "acc_expert": "mean_acc_expert",
+        "acc_peers": "mean_acc_peers",
+        "trust_expert": "mean_trust_expert",
+        "trust_peers": "mean_trust_peers",
+    }
+    value_col = metric_map[metric]
+    
+    # Format data to match extension_heatmap_cells output
+    result = pd.DataFrame()
+    result["x"] = df["mu_e"]
+    result["y"] = df["c_pen"]
+    result["value"] = df[value_col]
+    result["mu_e"] = df["mu_e"]
+    result["c_pen"] = df["c_pen"]
+    result["n_runs"] = df["n_runs"]
+    result["delta_acc"] = df["delta_acc"]
+    result["is_paradox"] = df["is_paradox"]
+    result["mean_acc_expert_ss"] = df["mean_acc_expert"]  # Use steady state values
+    result["mean_acc_peers_ss"] = df["mean_acc_peers"]    # Use steady state values
+    
+    # Filter based on fixed parameters (base model only has mu_e and c_pen)
+    for k, v in fixed.items():
+        if k == "mu_e":
+            result = result[result["mu_e"] == v]
+        elif k == "c_pen":
+            result = result[result["c_pen"] == v]
+    
+    # Select only the x_var and y_var columns for the specified variables
+    if x_var == "mu_e" and y_var == "c_pen":
+        pass  # Already in correct format
+    elif x_var == "c_pen" and y_var == "mu_e":
+        # Swap x and y
+        result["x"], result["y"] = result["y"], result["x"]
+    else:
+        # For base model, we only support mu_e and c_pen
+        raise ValueError(f"Base model only supports mu_e and c_pen as x_var/y_var, got {x_var} and {y_var}")
+    
+    return result.sort_values(["y", "x"])
+
+
 def extension_levels(study: str, regime: str = "cyclic", feedback_mode: str = "full") -> dict:
     evaluation_mode = "binary" if study == "2" else "continuous"
     df = db.fetch_df(

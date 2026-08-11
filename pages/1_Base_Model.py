@@ -87,6 +87,40 @@ st.plotly_chart(
     use_container_width=True,
 )
 
+
+with st.expander("Explore other metrics"):
+    metric = st.selectbox(
+        "Metric",
+        ["acc_expert", "acc_peers", "trust_expert", "trust_peers"],
+        format_func=lambda m: plotting.METRIC_LABELS.get(m, m),
+    )
+    heat = loaders.base_metric_heatmap_cells(
+        study="1",
+        feedback_mode=feedback,
+        regime="stationary",
+        x_var="mu_e",
+        y_var="c_pen",
+        fixed={},
+        steady=steady,
+        metric=metric,
+    )
+    if heat.empty:
+        st.warning("No data for this selection.")
+    else:
+        st.plotly_chart(
+            plotting.parameter_metric_heatmap_figure(
+                heat,
+                x_label="μ<sub>E</sub>",
+                y_label="c<sub>pen</sub>",
+                metric=metric,
+                title="",
+                selected_x=selected_mu,
+                selected_y=selected_c_pen,
+            ),
+            use_container_width=True,
+        )
+
+
 st.subheader("Selected condition dynamics")
 cid = loaders.condition_id(
     "1", feedback, "binary", "stationary", selected_mu, selected_c_pen
@@ -180,25 +214,3 @@ else:
         ),
         use_container_width=True,
     )
-
-with st.expander("Explore other base-model metrics"):
-    metric = st.selectbox(
-        "Metric",
-        ["p_expert", "acc_expert", "acc_peers", "trust_expert", "trust_peers"],
-        format_func=lambda m: plotting.METRIC_LABELS.get(m, m),
-    )
-    df = loaders.heatmap_data(
-        "1", feedback, "binary", "stationary", steady=steady, metric=metric
-    )
-    if df.empty:
-        st.warning("No data for this selection.")
-    else:
-        n_caption = f" · N = {n_runs} simulations" if n_runs else ""
-        st.plotly_chart(
-            plotting.heatmap_figure(
-                df,
-                metric,
-                title=f"{plotting.METRIC_LABELS.get(metric, metric)} · feedback={feedback}{n_caption}",
-            ),
-            use_container_width=True,
-        )
