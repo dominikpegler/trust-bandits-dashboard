@@ -3,6 +3,9 @@
 These require a running PostgreSQL (default: localhost:5433, db trustbandits,
 user postgres, password testpass — see dashboard/config.py). Set DATABASE_URL
 to point elsewhere if needed.
+
+The same suite runs against the DuckDB backend by setting DATA_BACKEND=duckdb
+and DUCKDB_PATH to a built ``.duckdb`` file (see scripts/export_duckdb.py).
 """
 import os
 import sys
@@ -22,13 +25,39 @@ def engine():
     db.dispose()
 
 
-def test_schema_tables_exist(engine):
+@pytest.fixture(scope="module")
+def duckdb_engine():
+    if os.getenv("DATA_BACKEND", "postgres").lower() != "duckdb":
+        pytest.skip("DuckDB backend not selected (set DATA_BACKEND=duckdb)")
+    db.init_db()
+    yield db.get_engine()
+    db.dispose()
+
+
+@pytest.fixture(scope="module")
+def tables():
+    if os.getenv("DATA_BACKEND", "postgres").lower() == "duckdb":
+        return (
+            "conditions", "runs", "base_cost_runs", "base_trajectories",
+            "base_error_traces_agg", "extension_condition_aggregates",
+            "extension_trajectories", "d5_runs", "hysteresis",
+            "hysteresis_trajectories", "ingest_meta", "model_meta",
+        )
+    return (
+        "conditions", "runs", "trials", "base_cost_runs", "base_error_traces",
+        "extension_condition_aggregates", "extension_trajectories", "d5_runs",
+        "hysteresis", "hysteresis_trajectories", "ingest_meta", "model_meta",
+    )
+
+
+def test_schema_tables_exist(engine, tables):
+    if os.getenv("DATA_BACKEND", "postgres").lower() == "duckdb":
+        present = set(db.fetch_df("SHOW TABLES")["name"])
+        for t in tables:
+            assert t in present, f"table {t} missing"
+        return
     with engine.connect() as c:
-        for t in (
-            "conditions", "runs", "trials", "base_cost_runs", "base_error_traces",
-            "extension_condition_aggregates", "extension_trajectories", "d5_runs",
-            "hysteresis", "hysteresis_trajectories", "ingest_meta", "model_meta",
-        ):
+        for t in tables:
             row = c.exec_driver_sql(
                 "SELECT to_regclass('public." + t + "')"
             ).fetchone()
@@ -122,8 +151,13 @@ def test_dynamic_base_condition_error_trace(engine):
     err = loaders.base_condition_error_trace_data(cid, window=5, max_events_per_source=10)
     assert not err.empty
     assert set(err["source"].unique()).issubset({"Expert", "Peers"})
-    assert err["offset"].min() >= -5
-    assert err["offset"].max() <= 5
+    if os.getenv("DATA_BACKEND", "postgres").lower() == "duckdb":
+        # Pre-aggregated table is fixed at export-time window (10).
+        assert err["offset"].min() >= -10
+        assert err["offset"].max() <= 10
+    else:
+        assert err["offset"].min() >= -5
+        assert err["offset"].max() <= 5
 
 
 def test_hysteresis_trajectory(engine):

@@ -20,5 +20,13 @@ USER user
 
 COPY --chown=user . $HOME/app
 
+# Bake the compact DuckDB dataset into the image (zero cold-start latency).
+# Rebuild the image to refresh the data; the canonical artifact lives in Azure
+# Blob Storage (see scripts/export_duckdb.py).
+COPY --chown=user data/trust_bandits.duckdb $HOME/app/data/trust_bandits.duckdb
+
+ENV DATA_BACKEND=duckdb \
+    DUCKDB_PATH=$HOME/app/data/trust_bandits.duckdb
+
 EXPOSE 7860
 CMD ["streamlit", "run", "app.py", "--server.port=7860", "--server.address=0.0.0.0"]

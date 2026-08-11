@@ -856,28 +856,49 @@ def error_locked_trust_figure(df: pd.DataFrame) -> go.Figure:
         sub = df[df["source"] == src]
         if sub.empty:
             continue
-        agg = (
-            sub.groupby("offset")["trust_norm"]
-            .agg(mean="mean", sd="std", n="count")
-            .reset_index()
-            .sort_values("offset")
-        )
-        ci = 1.96 * agg["sd"] / np.sqrt(agg["n"])
-        fig.add_trace(
-            go.Scatter(
-                x=agg["offset"],
-                y=agg["mean"],
-                mode="lines",
-                name=src,
-                line=dict(color=color, width=2),
-                error_y=dict(
-                    type="data",
-                    array=ci,
-                    visible=True,
-                    color=_source_rgba("expert" if src == "Expert" else "peers", 0.25),
-                ),
+        if "mean_trust_norm" in sub.columns:
+            # Pre-aggregated rows (base_error_traces_agg): mean/SD/count per offset.
+            agg = sub.sort_values("trial_offset")
+            ci = 1.96 * agg["sd_trust_norm"] / np.sqrt(agg["n_events"])
+            fig.add_trace(
+                go.Scatter(
+                    x=agg["trial_offset"],
+                    y=agg["mean_trust_norm"],
+                    mode="lines",
+                    name=src,
+                    line=dict(color=color, width=2),
+                    error_y=dict(
+                        type="data",
+                        array=ci,
+                        visible=True,
+                        color=_source_rgba("expert" if src == "Expert" else "peers", 0.25),
+                    ),
+                )
             )
-        )
+        else:
+            # Raw per-event rows (legacy): aggregate trust_norm per offset.
+            agg = (
+                sub.groupby("offset")["trust_norm"]
+                .agg(mean="mean", sd="std", n="count")
+                .reset_index()
+                .sort_values("offset")
+            )
+            ci = 1.96 * agg["sd"] / np.sqrt(agg["n"])
+            fig.add_trace(
+                go.Scatter(
+                    x=agg["offset"],
+                    y=agg["mean"],
+                    mode="lines",
+                    name=src,
+                    line=dict(color=color, width=2),
+                    error_y=dict(
+                        type="data",
+                        array=ci,
+                        visible=True,
+                        color=_source_rgba("expert" if src == "Expert" else "peers", 0.25),
+                    ),
+                )
+            )
     fig.add_vline(x=0, line_color="black", line_width=1)
     fig.add_hline(y=0, line_color="gray", line_dash="dot")
     fig.update_layout(

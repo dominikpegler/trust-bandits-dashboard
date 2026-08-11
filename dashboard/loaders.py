@@ -13,6 +13,19 @@ METRIC_COLUMNS = {
     "trust_peers": ("mean_trust_peers", "mean_trust_peers_ss", "sd_trust_peers", "sd_trust_peers_ss"),
 }
 
+
+def _has_table(name: str) -> bool:
+    """True if the current backend exposes the given table."""
+    import os
+
+    if os.getenv("DATA_BACKEND", "postgres").lower() == "duckdb":
+        present = set(db.fetch_df("SHOW TABLES")["name"])
+        return name in present
+    row = db.fetch_df(
+        "SELECT to_regclass('public.' || :name) AS t", {"name": name}
+    )
+    return not row.empty and row.iloc[0]["t"] is not None
+
 STUDIES = ("1", "2", "3", "d5-1", "d5-2", "d5-3")
 
 # Friendly model names for display (the codes stay as internal query keys).
@@ -38,7 +51,15 @@ def model_meta(study: str) -> dict:
     )
     if df.empty or df.iloc[0]["design"] is None:
         return {}
-    return df.iloc[0]["design"]
+    design = df.iloc[0]["design"]
+    if isinstance(design, str):
+        import json
+
+        try:
+            return json.loads(design)
+        except (TypeError, ValueError):
+            return {}
+    return design
 
 
 def _design_num(design: dict, key: str, default: str | None = None) -> str | None:
@@ -248,7 +269,21 @@ def base_cost_data(feedback_mode: str = "full") -> pd.DataFrame:
 
 
 def base_error_trace_data(feedback_mode: str = "full") -> pd.DataFrame:
-    """D1 error-locked trust changes around source errors."""
+    """D1 error-locked trust changes around source errors.
+
+    Reads the pre-aggregated ``base_error_traces_agg`` table when present
+    (DuckDB export); otherwise falls back to the legacy ``base_error_traces``
+    table (Postgres dev database).
+    """
+    if _has_table("base_error_traces_agg"):
+        return db.fetch_df(
+            """SELECT feedback_mode, source, trial_offset AS offset,
+                      mean_trust_norm AS trust_norm
+               FROM base_error_traces_agg
+               WHERE feedback_mode = :feedback_mode
+               ORDER BY source, trial_offset""",
+            {"feedback_mode": feedback_mode},
+        )
     q = """
         SELECT feedback_mode, run_id, trial_offset AS offset, source, trust_norm
         FROM base_error_traces
@@ -263,12 +298,35 @@ def base_condition_error_trace_data(
     window: int = 10,
     max_events_per_source: int = 1000,
 ) -> pd.DataFrame:
-    """Compute error-locked trust traces dynamically for one base-model condition.
+    """Error-locked trust traces for one base-model condition.
 
-    For each Expert/Peers error event, trust is baseline-normalized relative to
-    the trust value at the error trial and tracked over +/- `window` trials.
-    Events are capped per source to keep the dashboard responsive.
+    Reads the pre-aggregated ``base_error_traces_agg`` table (built by
+    ``scripts/export_duckdb.py``), which holds per-(condition, source, offset)
+    mean/SD/count of baseline-normalized trust. The ``window`` and
+    ``max_events_per_source`` arguments are accepted for backward compatibility
+    but are fixed at export time.
     """
+    row = db.fetch_df(
+        """SELECT c.id AS condition_id, c.mu_e, c.c_pen, c.feedback_mode
+           FROM conditions c
+           WHERE c.id = :cid""",
+        {"cid": condition_id},
+    )
+    if row.empty:
+        return pd.DataFrame()
+    if _has_table("base_error_traces_agg"):
+        mu_e = float(row.iloc[0]["mu_e"])
+        c_pen = float(row.iloc[0]["c_pen"])
+        feedback = row.iloc[0]["feedback_mode"]
+        return db.fetch_df(
+            """SELECT source, trial_offset, trial_offset AS offset,
+                      mean_trust_norm, sd_trust_norm, n_events
+               FROM base_error_traces_agg
+               WHERE mu_e = :mu_e AND c_pen = :c_pen AND feedback_mode = :feedback
+               ORDER BY source, trial_offset""",
+            {"mu_e": mu_e, "c_pen": c_pen, "feedback": feedback},
+        )
+    # Fallback: compute from raw trial-level data (Postgres dev database).
     raw = db.fetch_df(
         """SELECT run_id, trial, trust_expert, trust_peers, acc_expert, acc_peers
            FROM trials
@@ -383,11 +441,43 @@ def trajectory_data(
     cid: int,
     steady: bool = False,
 ) -> pd.DataFrame:
-    """Per-run per-trial data for one condition. Aggregates to trial means + CI.
+    """Per-trial trajectory data for one condition (pre-aggregated).
 
-    If `steady` is True, only second-half trials are returned (steady state).
-    Returns a DataFrame with per-trial means/SDs plus an `n_runs` column.
+    Reads the pre-aggregated ``base_trajectories`` table (built by
+    ``scripts/export_duckdb.py``), which holds per-trial means/SDs plus an
+    ``n_runs`` count. If `steady` is True, only second-half trials are returned
+    (steady state). The output shape matches the previous raw-``trials``
+    aggregation so callers and plotting helpers are unchanged.
     """
+    row = db.fetch_df(
+        """SELECT c.id AS condition_id, c.mu_e, c.c_pen, c.feedback_mode
+           FROM conditions c
+           WHERE c.id = :cid""",
+        {"cid": cid},
+    )
+    if row.empty:
+        return pd.DataFrame()
+    if _has_table("base_trajectories"):
+        mu_e = float(row.iloc[0]["mu_e"])
+        c_pen = float(row.iloc[0]["c_pen"])
+        feedback = row.iloc[0]["feedback_mode"]
+        df = db.fetch_df(
+            """SELECT trial, n_runs, mean_p_expert, sd_p_expert,
+                      mean_trust_expert, sd_trust_expert, mean_trust_peers,
+                      sd_trust_peers, mean_acc_expert, sd_acc_expert,
+                      mean_acc_peers, sd_acc_peers
+               FROM base_trajectories
+               WHERE mu_e = :mu_e AND c_pen = :c_pen AND feedback_mode = :feedback
+               ORDER BY trial""",
+            {"mu_e": mu_e, "c_pen": c_pen, "feedback": feedback},
+        )
+        if df.empty:
+            return df
+        if steady:
+            cutoff = int(df["trial"].max()) // 2
+            df = df[df["trial"] > cutoff].reset_index(drop=True)
+        return df
+    # Fallback: aggregate from raw trial-level data (Postgres dev database).
     if steady:
         q = """
             SELECT run_id, trial, p_expert, trust_expert, trust_peers,

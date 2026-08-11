@@ -5,8 +5,10 @@
 
 This repository contains a Streamlit companion dashboard for the trust-bandits
 paper. The dashboard is intended for author-facing exploration first and public
-sharing later. It reads from PostgreSQL and reuses the Python simulation package
-from =../trust-bandits-analysis= for the live simulator.
+sharing later. It reads from a pluggable data backend (PostgreSQL for local
+development and tests, a compact DuckDB file for deployment) and reuses the
+Python simulation package from =../trust-bandits-analysis= for the live
+simulator.
 
 Dashboard terminology is **Expert/Peers** throughout, even where the paper
 figures may use Tower/Square.
@@ -16,12 +18,38 @@ Behavior-style labels and internal names were renamed; =db.init_db()= performs a
 compatibility migration from the previous polarization table/study keys to
 =d5_runs= / =d5-*= when opening an existing development database.
 
+* Data Backend
+
+The dashboard reads through a pluggable backend selected by =DATA_BACKEND=:
+
+- =postgres= (default) — the original SQLAlchemy/psycopg2 path, used for local
+  development and tests against a real PostgreSQL.
+- =duckdb= — reads a local =.duckdb= file (the compact artifact produced by
+  =scripts/export_duckdb.py=), used in deployed environments. Set =DUCKDB_PATH=
+  to the file location (the path baked into the image on Azure). If the file is
+  absent, the backend downloads it from Azure Blob Storage into the writable
+  Streamlit cache dir on first use (=dashboard/blobstore.py=), so the app
+  self-provisions on hosts with an ephemeral or read-only filesystem.
+
+=scripts/export_duckdb.py= reads the same raw sources as =ingest.py=,
+pre-aggregates the base-model trial-level data into =base_trajectories= and
+=base_error_traces_agg=, and writes a single =.duckdb= file (about 36 MB). The
+raw 6.4M-row =trials= table and the dead =base_error_traces= table are not
+exported. The file is uploaded to Azure Blob Storage with =--upload=.
+
+The deployed app uses the DuckDB backend. On Azure the =.duckdb= file is baked
+into the container image (zero cold start); on Streamlit Community Cloud (which
+has an ephemeral, read-only filesystem) it is fetched from Blob into the
+writable Streamlit cache dir on cold start. See
+=docs/db-migration-memo.md= for the rationale and benchmark.
+
 * Deployment
 
 The Streamlit SDK is deprecated on Hugging Face Spaces, so the app is deployed
 as a Docker container. The =Dockerfile= is production-ready: it installs the
 =trustbandits= package from the analysis repo as a git dependency (so the Live
-Simulator works in the deployed image) and runs as a non-root user.
+Simulator works in the deployed image), bakes in the =.duckdb= file, sets
+=DATA_BACKEND=duckdb=, and runs as a non-root user.
 
 Caveat: the =trustbandits= analysis repo is currently **private**, so the
 Docker image will only build once that repo is made public (planned for paper
@@ -31,11 +59,11 @@ Cloud or build locally.
 Three hosting paths are documented in =README.md=:
 
 - **Streamlit Community Cloud** (free) — for showing collaborators; no
-  Dockerfile needed.
+  Dockerfile needed. Fetches the =.duckdb= from Blob on cold start.
 - **Hugging Face Spaces** (Docker SDK) — requires a recurring PRO/Team
-  subscription.
-- **Azure** (Container Apps / App Service) — permanent hosting reusing the
-  existing Azure subscription and Postgres.
+  subscription; the =.duckdb= is baked into the image.
+- **Azure** (Container Apps / App Service) — permanent hosting; the =.duckdb=
+  is baked into the image, so no managed relational database is needed.
 
 * Local Development
 
@@ -75,6 +103,13 @@ python scripts/ingest.py --studies 1 2 3 d5
 Use =--skip-trials= for faster iteration when base-model trajectory data are not
 needed.
 
+The DuckDB export builds the deployment artifact from the same raw sources:
+
+#+begin_src bash
+python scripts/export_duckdb.py --out data/trust_bandits.duckdb
+python scripts/export_duckdb.py --upload   # also push to Azure Blob
+#+end_src
+
 Current full local ingest row counts:
 
 - =conditions=: 450
@@ -86,14 +121,24 @@ Current full local ingest row counts:
 - =hysteresis=: 12
 - =hysteresis_trajectories=: 1600
 
+The DuckDB export replaces =trials= and =base_error_traces= with the
+pre-aggregated =base_trajectories= (6400 rows) and =base_error_traces_agg=
+(5376 rows).
+
 * Current Tables
 
 - =conditions=: condition-level aggregates from JSON exports.
 - =runs=: base-model per-run means over all =mu_E × c_pen × feedback= cells.
-- =trials=: base-model trial-level data for trajectory exploration.
+- =trials=: base-model trial-level data for trajectory exploration (Postgres
+  only; not exported to DuckDB).
 - =base_cost_runs=: D3 cognitive-cost sweep from the D3 source CSV.
 - =base_error_traces=: paper representative base-model D1 error-locked traces.
-  Kept for reference.
+  Kept for reference (Postgres only; not exported to DuckDB).
+- =base_trajectories=: pre-aggregated per-trial mean/SD base-model trajectories
+  (DuckDB export; replaces the raw =trials= for the Base Model dynamics).
+- =base_error_traces_agg=: pre-aggregated error-locked trust traces per
+  (condition, source, offset) (DuckDB export; replaces the runtime computation
+  from =trials=).
 - =d5_runs=: base-model polarization per-run steady-state values from the D5
   per-run source CSV.
 - =hysteresis=: hysteresis JSON summary values.
@@ -156,15 +201,18 @@ Current full local ingest row counts:
 python - <<'PY'
 import ast, pathlib
 for f in ['app.py', *map(str, sorted(pathlib.Path('pages').glob('*.py'))),
-          'dashboard/plotting.py', 'dashboard/loaders.py', 'scripts/ingest.py']:
+          'dashboard/plotting.py', 'dashboard/loaders.py', 'dashboard/backends.py',
+          'scripts/ingest.py', 'scripts/export_duckdb.py']:
     ast.parse(open(f).read())
 print('parse OK')
 PY
 
 ~/miniconda3/envs/tower/bin/python -m pytest tests/ -q
+DATA_BACKEND=duckdb DUCKDB_PATH=data/trust_bandits.duckdb \
+  ~/miniconda3/envs/tower/bin/python -m pytest tests/ -q
 #+end_src
 
-Current test status: 15 tests passing.
+Current test status: 16 tests passing on both the Postgres and DuckDB backends.
 
 * Known Alignment Status
 
@@ -194,3 +242,9 @@ Still not fully aligned:
    Streamlit Markdown uses LaTeX.
 2. Run a manual Streamlit click-through after helper edits because imported
    modules under =dashboard/= require a Streamlit restart.
+3. Decommission the Azure PostgreSQL instance and provision the Azure Blob
+   container; run =scripts/export_duckdb.py --upload= to publish the artifact.
+4. On Azure, bake the =.duckdb= into the image (the =Dockerfile= already does)
+   and set =DATA_BACKEND=duckdb=; no database connection is needed.
+5. Decide the Blob auth model (SAS token vs managed identity) and confirm the
+   container name/region.

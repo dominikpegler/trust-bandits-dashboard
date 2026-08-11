@@ -5,6 +5,7 @@ from typing import Iterator, Optional
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
 
+from .backends import get_backend, reset_backend
 from .config import database_url
 from .schema import SCHEMA
 
@@ -12,6 +13,16 @@ _engine: Optional[Engine] = None
 
 
 def get_engine() -> Engine:
+    """Return the active backend's engine/connection.
+
+    Under the Postgres backend this is the SQLAlchemy engine (used by the
+    ingest script and tests). Under the DuckDB backend it is the DuckDB
+    connection object.
+    """
+    import os
+
+    if os.getenv("DATA_BACKEND", "postgres").lower() == "duckdb":
+        return get_backend().engine()
     global _engine
     if _engine is None:
         _engine = create_engine(
@@ -29,6 +40,7 @@ def dispose() -> None:
     if _engine is not None:
         _engine.dispose()
         _engine = None
+    reset_backend()
 
 
 @contextlib.contextmanager
@@ -43,7 +55,15 @@ def connect() -> Iterator:
 
 
 def init_db() -> None:
-    """Create tables/partitions if they do not yet exist. Idempotent."""
+    """Create tables/partitions if they do not yet exist. Idempotent.
+
+    Under the DuckDB backend this is a no-op: the schema is baked into the
+    ``.duckdb`` file at export time, so there is nothing to create.
+    """
+    import os
+
+    if os.getenv("DATA_BACKEND", "postgres").lower() == "duckdb":
+        return
     engine = get_engine()
     with engine.begin() as c:
         legacy_d5_table = "b" + "5_runs"
@@ -88,8 +108,10 @@ def exec_ddl(sql: str) -> None:
 
 
 def fetch_df(query: str, params: Optional[dict] = None) -> "pd.DataFrame":
-    import pandas as pd
+    """Run a read query against the configured backend.
 
-    engine = get_engine()
-    with engine.connect() as c:
-        return pd.read_sql_query(text(query), c, params=params)
+    The backend is selected by ``DATA_BACKEND`` (``postgres`` | ``duckdb``).
+    Queries use Postgres ``:name`` bind style; the DuckDB backend translates
+    them automatically.
+    """
+    return get_backend().fetch_df(query, params)
