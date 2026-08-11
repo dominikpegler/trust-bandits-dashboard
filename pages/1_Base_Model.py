@@ -76,11 +76,11 @@ with st.sidebar:
         ],
     )
 
-st.subheader("D1: Expert fragility heatmap")
+st.subheader("Parameter landscape heatmaps")
 st.markdown(
     "Color = mean p(Expert); white numbers = accuracy gap (Expert − Peers); "
-    "white outlines = fragility cells (Expert more accurate yet p(Expert) < 0.5); "
-    "red outline = the selected condition below."
+    "white outlines = fragility regions (Expert more accurate yet p(Expert) < 0.5); "
+    "black outline = the selected condition below."
 )
 st.plotly_chart(
     plotting.base_paradox_heatmap_figure(heat, feedback, selected_mu, selected_c_pen),

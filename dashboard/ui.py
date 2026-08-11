@@ -59,7 +59,7 @@ MODEL_DESCRIPTIONS = {
         r"estimates that update across trials and by introducing cyclic "
         r"evidence regime shifts, testing whether institutional inertia "
         r"combined with environmental change produces trust hysteresis (D4) "
-        r"and whether B1 persists when trials represent an evolving situation "
+        r"and whether D1 persists when trials represent an evolving situation "
         r"rather than independent questions."
     ),
     "3": (
@@ -75,7 +75,7 @@ MODEL_DESCRIPTIONS = {
         r"correlated peer exposure ($\rho_{\mathrm{peer}}$) to test whether "
         r"their joint presence — but neither alone — produces a bimodal trust "
         r"distribution across otherwise identical societies, and whether "
-        r"graded evaluation buffers this bifurcation just as it buffers B1."
+        r"graded evaluation buffers this bifurcation just as it buffers D1."
     ),
 }
 

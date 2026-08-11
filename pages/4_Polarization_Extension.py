@@ -101,13 +101,14 @@ for fb in ["full", "partial"]:
             text=[[f"{v:.2f}" for v in row] for row in sd_grid.values],
             texttemplate="%{text}",
             hovertemplate="ρ<sub>peer</sub>=%{x}<br>ρ<sub>clust</sub>=%{y}<br>SD=%{z:.3f}<extra></extra>",
-            colorbar=dict(title="SD"),
+            colorbar=dict(title="SD", len=0.5),
         )
     )
     heat.update_layout(
         title=f"feedback={fb}",
         xaxis_title="ρ<sub>peer</sub>",
         yaxis_title="ρ<sub>clust</sub>",
+        yaxis=dict(scaleanchor="x", scaleratio=1),
     )
     sd_figs.append(heat)
 for fig in sd_figs:

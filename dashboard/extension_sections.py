@@ -82,8 +82,8 @@ def render_extension_page(study: str):
 
     st.markdown(model_description(study))
     st.markdown(
-        "Three parameter-landscape slices following the paper, each fixing the "
-        "third parameter: $\\mu_E \\times c_{{\\mathrm{pen}}}$, "
+        "Three parameter-landscape slices, each fixing the third parameter: "
+        "$\\mu_E \\times c_{{\\mathrm{pen}}}$, "
         "$d_T \\times c_{{\\mathrm{pen}}}$, $d_T \\times \\mu_E$."
     )
 
@@ -168,6 +168,12 @@ def render_extension_page(study: str):
                 )
             )
     if main_figs:
+        st.subheader("Parameter landscape heatmaps")
+        st.markdown(
+            "Color = mean p(Expert); white numbers = accuracy gap (Expert − Peers); "
+            "white outlines = fragility regions (Expert more accurate yet p(Expert) < 0.5); "
+            "black outline = the selected condition below."
+        )
         for fig in main_figs:
             st.plotly_chart(fig, use_container_width=True)
     else:

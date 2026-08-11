@@ -16,6 +16,12 @@ except Exception:  # pragma: no cover - fallback if trustbandits not importable
 # more pastel 0.20; tune here to taste.
 HEATMAP_ALPHA = 0.86
 
+# Drop-shadow cast by fragility regions onto their neighbors, giving the
+# regions a "raised" look. offset is the strip thickness in cell units;
+# opacity is the shadow darkness.
+PARADOX_SHADOW_OFFSET = 0.15
+PARADOX_SHADOW_OPACITY = 0.28
+
 METRIC_LABELS = {
     "p_expert": "p(Expert)",
     "acc_expert": "Expert accuracy",
@@ -162,7 +168,7 @@ def heatmap_figure(
             colorscale=colorscale,
             zmin=zmin,
             zmax=zmax,
-            colorbar=dict(title=METRIC_LABELS.get(metric, metric)),
+            colorbar=dict(title=METRIC_LABELS.get(metric, metric), len=0.5),
             hovertemplate="μ<sub>E</sub>=%{x}<br>c<sub>pen</sub>=%{y}<br>%{z:.3f}<extra></extra>",
         )
     )
@@ -170,7 +176,8 @@ def heatmap_figure(
         title=title,
         xaxis_title=mathify("Evidence strength (mu_E)"),
         yaxis_title=mathify("Asymmetric penalty (c_pen)"),
-        height=520,
+        yaxis=dict(scaleanchor="x", scaleratio=1),
+        height=700,
         margin=dict(l=60, r=20, t=60, b=50),
     )
     return fig
@@ -224,6 +231,73 @@ def marginal_figure(
     return fig
 
 
+def _add_paradox_shadow(
+    fig: go.Figure,
+    mask: np.ndarray,
+    offset: float = PARADOX_SHADOW_OFFSET,
+    opacity: float = PARADOX_SHADOW_OPACITY,
+) -> None:
+    """Cast a soft dark shadow from each fragility cell onto the cells below
+    and to its right, so the region reads as sitting slightly higher.
+
+    The shadow is drawn on top of the heatmap (the heatmap is a single opaque
+    trace, so a shadow behind it would be invisible). The white outline is
+    added afterwards so it stays on top of the shadow.
+    """
+    n_rows, n_cols = mask.shape
+    fill = f"rgba(0,0,0,{opacity})"
+    for i in range(n_rows):
+        for j in range(n_cols):
+            if not mask[i, j]:
+                continue
+            # bottom strip: shadow cast onto the cell below, only where the
+            # region's outer boundary runs (matching the white outline)
+            if i == n_rows - 1 or not mask[i + 1, j]:
+                fig.add_shape(
+                    type="rect", xref="x", yref="y",
+                    x0=j - 0.5, x1=j + 0.5, y0=i + 0.5, y1=i + 0.5 + offset,
+                    fillcolor=fill, line=dict(width=0),
+                )
+            # right strip: shadow cast onto the cell to the right, only where
+            # the region's outer boundary runs (matching the white outline)
+            if j == n_cols - 1 or not mask[i, j + 1]:
+                fig.add_shape(
+                    type="rect", xref="x", yref="y",
+                    x0=j + 0.5, x1=j + 0.5 + offset, y0=i - 0.5, y1=i + 0.5,
+                    fillcolor=fill, line=dict(width=0),
+                )
+
+
+def _add_paradox_boundaries(fig: go.Figure, mask: np.ndarray) -> None:
+    """Draw a white line on each fragility-cell edge that borders a non-fragility
+    cell (or the grid edge), outlining each fragility region without internal lines."""
+    n_rows, n_cols = mask.shape
+    for i in range(n_rows):
+        for j in range(n_cols):
+            if not mask[i, j]:
+                continue
+            # top edge
+            if i == 0 or not mask[i - 1, j]:
+                fig.add_shape(type="line", xref="x", yref="y",
+                              x0=j - 0.5, y0=i - 0.5, x1=j + 0.5, y1=i - 0.5,
+                              line=dict(color="white", width=1.5))
+            # bottom edge
+            if i == n_rows - 1 or not mask[i + 1, j]:
+                fig.add_shape(type="line", xref="x", yref="y",
+                              x0=j - 0.5, y0=i + 0.5, x1=j + 0.5, y1=i + 0.5,
+                              line=dict(color="white", width=1.5))
+            # left edge
+            if j == 0 or not mask[i, j - 1]:
+                fig.add_shape(type="line", xref="x", yref="y",
+                              x0=j - 0.5, y0=i - 0.5, x1=j - 0.5, y1=i + 0.5,
+                              line=dict(color="white", width=1.5))
+            # right edge
+            if j == n_cols - 1 or not mask[i, j + 1]:
+                fig.add_shape(type="line", xref="x", yref="y",
+                              x0=j + 0.5, y0=i - 0.5, x1=j + 0.5, y1=i + 0.5,
+                              line=dict(color="white", width=1.5))
+
+
 def base_paradox_heatmap_figure(
     df: pd.DataFrame,
     feedback_mode: str,
@@ -246,6 +320,7 @@ def base_paradox_heatmap_figure(
     delta = df.pivot(index="c_pen", columns="mu_e", values="delta_acc").loc[pen_vals, mu_vals]
     acc_e = df.pivot(index="c_pen", columns="mu_e", values="mean_acc_expert").loc[pen_vals, mu_vals]
     acc_p = df.pivot(index="c_pen", columns="mu_e", values="mean_acc_peers").loc[pen_vals, mu_vals]
+    paradox = df.pivot(index="c_pen", columns="mu_e", values="is_paradox").loc[pen_vals, mu_vals].astype(bool)
     mu_matrix = np.tile(np.array(mu_vals), (len(pen_vals), 1))
     pen_matrix = np.tile(np.array(pen_vals).reshape(-1, 1), (1, len(mu_vals)))
     custom = np.dstack([mu_matrix, pen_matrix, acc_e.values, acc_p.values, delta.values])
@@ -263,7 +338,7 @@ def base_paradox_heatmap_figure(
             texttemplate="%{text}",
             textfont=dict(color="white"),
             customdata=custom,
-            colorbar=dict(title="p(Expert)"),
+            colorbar=dict(title="p(Expert)", len=0.5),
             hovertemplate=(
                 "μ<sub>E</sub>=%{customdata[0]:.3g}<br>c<sub>pen</sub>=%{customdata[1]:.3g}<br>"
                 "p(Expert)=%{z:.3f}<br>Expert accuracy=%{customdata[2]:.3f}"
@@ -271,29 +346,29 @@ def base_paradox_heatmap_figure(
             ),
         )
     )
-    # Draw full-cell outlines.
+    # Cast a drop shadow from each fragility region onto its neighbors so the
+    # region reads as sitting slightly higher.
+    _add_paradox_shadow(fig, paradox.values)
+    # Draw a white outline around each fragility region (only edges bordering
+    # non-fragility cells or the grid edge).
+    _add_paradox_boundaries(fig, paradox.values)
+    # Draw the selected-condition outline.
     for _, row in df.iterrows():
         x = mu_vals.index(row["mu_e"])
         y = pen_vals.index(row["c_pen"])
-        if row["is_paradox"]:
-            fig.add_shape(
-                type="rect", xref="x", yref="y",
-                x0=x - 0.5, x1=x + 0.5, y0=y - 0.5, y1=y + 0.5,
-                line=dict(color="white", width=2), fillcolor="rgba(0,0,0,0)",
-            )
         if np.isclose(row["mu_e"], representative_mu) and np.isclose(row["c_pen"], representative_c_pen):
             fig.add_shape(
                 type="rect", xref="x", yref="y",
                 x0=x - 0.52, x1=x + 0.52, y0=y - 0.52, y1=y + 0.52,
-                line=dict(color="red", width=2), fillcolor="rgba(0,0,0,0)",
+                line=dict(color="#1f1f1f", width=2.5), fillcolor="rgba(0,0,0,0)",
             )
     fig.update_layout(
         title="",
         xaxis_title="Evidence strength (μ<sub>E</sub>)",
         yaxis_title="Asymmetric penalty (c<sub>pen</sub>)",
         xaxis=dict(tickmode="array", tickvals=x_pos, ticktext=[f"{x:.3g}" for x in mu_vals]),
-        yaxis=dict(tickmode="array", tickvals=y_pos, ticktext=[f"{y:.3g}" for y in pen_vals], autorange="reversed"),
-        height=560,
+        yaxis=dict(tickmode="array", tickvals=y_pos, ticktext=[f"{y:.3g}" for y in pen_vals], autorange="reversed", scaleanchor="x", scaleratio=1),
+        height=700,
         margin=dict(l=70, r=20, t=20, b=60),
     )
     return fig
@@ -318,6 +393,7 @@ def parameter_paradox_heatmap_figure(
     delta = df.pivot(index="y", columns="x", values="delta_acc").loc[y_vals, x_vals]
     acc_e = df.pivot(index="y", columns="x", values="mean_acc_expert_ss").loc[y_vals, x_vals]
     acc_p = df.pivot(index="y", columns="x", values="mean_acc_peers_ss").loc[y_vals, x_vals]
+    paradox = df.pivot(index="y", columns="x", values="is_paradox").loc[y_vals, x_vals].astype(bool)
     x_matrix = np.tile(np.array(x_vals), (len(y_vals), 1))
     y_matrix = np.tile(np.array(y_vals).reshape(-1, 1), (1, len(x_vals)))
     custom = np.dstack([x_matrix, y_matrix, acc_e.values, acc_p.values, delta.values])
@@ -333,7 +409,7 @@ def parameter_paradox_heatmap_figure(
             texttemplate="%{text}",
             textfont=dict(color="white"),
             customdata=custom,
-            colorbar=dict(title="p(Expert)"),
+            colorbar=dict(title="p(Expert)", len=0.5),
             hovertemplate=(
                 f"{x_label}=%{{customdata[0]:.3g}}<br>{y_label}=%{{customdata[1]:.3g}}<br>"
                 "p(Expert)=%{z:.3f}<br>Expert accuracy=%{customdata[2]:.3f}"
@@ -341,28 +417,29 @@ def parameter_paradox_heatmap_figure(
             ),
         )
     )
+    # Cast a drop shadow from each fragility region onto its neighbors so the
+    # region reads as sitting slightly higher.
+    _add_paradox_shadow(fig, paradox.values)
+    # Draw a white outline around each fragility region (only edges bordering
+    # non-fragility cells or the grid edge).
+    _add_paradox_boundaries(fig, paradox.values)
+    # Draw the selected-condition outline.
     for _, row in df.iterrows():
         x = x_vals.index(row["x"])
         y = y_vals.index(row["y"])
-        if row.get("is_paradox", False):
-            fig.add_shape(
-                type="rect", xref="x", yref="y",
-                x0=x - 0.5, x1=x + 0.5, y0=y - 0.5, y1=y + 0.5,
-                line=dict(color="white", width=2), fillcolor="rgba(0,0,0,0)",
-            )
         if selected_x is not None and selected_y is not None and np.isclose(row["x"], selected_x) and np.isclose(row["y"], selected_y):
             fig.add_shape(
                 type="rect", xref="x", yref="y",
                 x0=x - 0.52, x1=x + 0.52, y0=y - 0.52, y1=y + 0.52,
-                line=dict(color="red", width=2), fillcolor="rgba(0,0,0,0)",
+                line=dict(color="#1f1f1f", width=2.5), fillcolor="rgba(0,0,0,0)",
             )
     fig.update_layout(
         title=title,
         xaxis_title=x_label,
         yaxis_title=y_label,
         xaxis=dict(tickmode="array", tickvals=list(range(len(x_vals))), ticktext=[f"{v:.3g}" for v in x_vals]),
-        yaxis=dict(tickmode="array", tickvals=list(range(len(y_vals))), ticktext=[f"{v:.3g}" for v in y_vals], autorange="reversed"),
-        height=460,
+        yaxis=dict(tickmode="array", tickvals=list(range(len(y_vals))), ticktext=[f"{v:.3g}" for v in y_vals], autorange="reversed", scaleanchor="x", scaleratio=1),
+        height=700,
         margin=dict(l=60, r=20, t=60 if title else 20, b=60),
     )
     return fig
@@ -401,7 +478,7 @@ def parameter_metric_heatmap_figure(
             zmax=1,
             text=[[f"{v:.2f}" for v in row] for row in pivot.values],
             texttemplate="%{text}",
-            colorbar=dict(title=METRIC_LABELS.get(metric, metric)),
+            colorbar=dict(title=METRIC_LABELS.get(metric, metric), len=0.5),
             customdata=np.dstack([
                 np.tile(np.array(x_vals), (len(y_vals), 1)),
                 np.tile(np.array(y_vals).reshape(-1, 1), (1, len(x_vals))),
@@ -420,15 +497,15 @@ def parameter_metric_heatmap_figure(
                 fig.add_shape(
                     type="rect", xref="x", yref="y",
                     x0=x - 0.52, x1=x + 0.52, y0=y - 0.52, y1=y + 0.52,
-                    line=dict(color="red", width=2), fillcolor="rgba(0,0,0,0)",
+                    line=dict(color="#1f1f1f", width=2.5), fillcolor="rgba(0,0,0,0)",
                 )
     fig.update_layout(
         title=title,
         xaxis_title=x_label,
         yaxis_title=y_label,
         xaxis=dict(tickmode="array", tickvals=list(range(len(x_vals))), ticktext=[f"{v:.3g}" for v in x_vals]),
-        yaxis=dict(tickmode="array", tickvals=list(range(len(y_vals))), ticktext=[f"{v:.3g}" for v in y_vals], autorange="reversed"),
-        height=460,
+        yaxis=dict(tickmode="array", tickvals=list(range(len(y_vals))), ticktext=[f"{v:.3g}" for v in y_vals], autorange="reversed", scaleanchor="x", scaleratio=1),
+        height=700,
         margin=dict(l=60, r=20, t=60 if title else 20, b=60),
     )
     return fig
