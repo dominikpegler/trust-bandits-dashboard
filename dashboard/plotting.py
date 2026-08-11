@@ -20,8 +20,8 @@ HEATMAP_ALPHA = 0.86
 # Drop-shadow cast by fragility regions onto their neighbors, giving the
 # regions a "raised" look. offset is the strip thickness in cell units;
 # opacity is the shadow darkness.
-PARADOX_SHADOW_OFFSET = 0.1
-PARADOX_SHADOW_OPACITY = 0.28
+PARADOX_SHADOW_OFFSET = 0.075
+PARADOX_SHADOW_OPACITY = 0.24
 
 METRIC_LABELS = {
     "p_expert": "p(Expert)",
@@ -475,7 +475,7 @@ def base_paradox_heatmap_figure(
                 path=rounded_rect_path(
                     x - 0.44, y - 0.44, x + 0.44, y + 0.44, radius=0.18
                 ),
-                line=dict(color="#4f4f4f", width=2.5),
+                line=dict(color="#4f4f4f", width=1.5),
                 fillcolor="rgba(0,0,0,0)",
             )
 
@@ -590,7 +590,7 @@ def parameter_paradox_heatmap_figure(
                 path=rounded_rect_path(
                     x - 0.44, y - 0.44, x + 0.44, y + 0.44, radius=0.18
                 ),
-                line=dict(color="#4f4f4f", width=2.5),
+                line=dict(color="#4f4f4f", width=1.5),
                 fillcolor="rgba(0,0,0,0)",
             )
 
@@ -690,7 +690,7 @@ def parameter_metric_heatmap_figure(
                     path=rounded_rect_path(
                         x - 0.44, y - 0.44, x + 0.44, y + 0.44, radius=0.18
                     ),
-                    line=dict(color="#4f4f4f", width=2.5),
+                    line=dict(color="#4f4f4f", width=1.5),
                     fillcolor="rgba(0,0,0,0)",
                 )
 
