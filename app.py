@@ -40,7 +40,7 @@ def overview_page() -> None:
         "depends on history (**hysteresis**), not just current parameters.\n"
         "- **D5 — Polarization**: Landscape clustering "
         "($\\rho_{\\mathrm{clust}}$) plus correlated peer exposure "
-        "($\\rho_{\\mathrm{peer}}$) splits otherwise identical societies into "
+        "($\\rho_{\\mathrm{peer}}$) splits otherwise identical communities (agents) into "
         "expert-trust and peer-trust modes (**bifurcation**)."
     )
 

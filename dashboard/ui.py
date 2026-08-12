@@ -74,7 +74,7 @@ MODEL_DESCRIPTIONS = {
         r"introduces landscape clustering ($\rho_{\mathrm{clust}}$) and "
         r"correlated peer exposure ($\rho_{\mathrm{peer}}$) to test whether "
         r"their joint presence — but neither alone — produces a bimodal trust "
-        r"distribution across otherwise identical societies, and whether "
+        r"distribution across otherwise identical communities (agents), and whether "
         r"graded evaluation buffers this bifurcation just as it buffers D1."
     ),
 }
