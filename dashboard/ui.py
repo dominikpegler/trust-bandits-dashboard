@@ -5,7 +5,7 @@ import streamlit as st
 
 PARAMETER_HELP = {
     "p_expert": "Probability that the simulated agent chooses the Expert rather than Peers on a trial.",
-    "p_peers": "Probability that the simulated agent chooses Peers; this is 1 - p(Expert).",
+    "p_peers": "Probability that the simulated agent chooses Peers; this is $1-p(\\mathrm{Expert})$.",
     "trust": "Learned source weight used when deciding whether to rely on the Expert or Peers.",
     "accuracy": "Fraction of trials on which a source gives the correct answer.",
     "accuracy_gap": "Expert accuracy minus Peers accuracy; positive values mean the Expert is more accurate.",
@@ -107,8 +107,8 @@ def apply_global_style() -> None:
 # The definition text is reused from PARAMETER_HELP so there is a single source
 # of truth per term.
 GLOSSARY_LABELS = {
-    "p_expert": "p(Expert)",
-    "p_peers": "p(Peers)",
+    "p_expert": "$p(\\mathrm{Expert})$",
+    "p_peers": "$p(\\mathrm{Peers})$",
     "trust": "Trust",
     "accuracy": "Accuracy",
     "accuracy_gap": "Accuracy gap",

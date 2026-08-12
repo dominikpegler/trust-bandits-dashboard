@@ -78,8 +78,8 @@ with st.sidebar:
 
 st.subheader("Parameter landscape heatmaps")
 st.markdown(
-    "Color = mean p(Expert); white numbers = accuracy gap (Expert − Peers); "
-    "elevated areas = fragility regions (Expert more accurate yet p(Expert) < 0.5); "
+    "Color = mean $p(\\mathrm{Expert})$; white numbers = accuracy gap (Expert − Peers); "
+    "elevated areas = fragility regions (Expert more accurate yet $p(\\mathrm{Expert}) < 0.5$); "
     "dark outline = the selected condition below."
 )
 st.plotly_chart(

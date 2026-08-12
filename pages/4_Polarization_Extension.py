@@ -9,9 +9,9 @@ st.title("Polarization Extension")
 
 st.markdown(model_description("d5-1"))
 st.markdown(
-    "Per-run steady-state p(Expert) distributions over the landscape-clustering "
+    "Per-run steady-state $p(\\mathrm{Expert})$ distributions over the landscape-clustering "
     "($\\rho_{clust}$, rows) × peer-correlation ($\\rho_{peer}$, columns) grid, "
-    "for the base model. The red dashed line marks p(Expert) = 0.5. Bimodality "
+    "for the base model. The red dashed line marks $p(\\mathrm{Expert}) = 0.5$. Bimodality "
     "(a split into a peer-trust and an expert-trust mode) emerges at high "
     "$\\rho_{clust}$ and $\\rho_{peer}$."
 )
@@ -20,13 +20,17 @@ st.markdown(
 d5_study = "d5-1"
 d5 = [s for s in loaders.available_studies() if s == d5_study]
 if not d5:
-    st.warning("No polarization-extension data in the database. Run `python scripts/ingest.py --studies d5`.")
+    st.warning(
+        "No polarization-extension data in the database. Run `python scripts/ingest.py --studies d5`."
+    )
     st.stop()
 
 with st.sidebar:
     st.header("Controls")
     st.caption("Polarization extension (base model)")
-    feedback = st.selectbox("Feedback mode", ["full", "partial"], help=help_text("feedback"))
+    feedback = st.selectbox(
+        "Feedback mode", ["full", "partial"], help=help_text("feedback")
+    )
 
 clust_levels, rho_levels = loaders.d5_grid_levels(d5_study)
 df = loaders.d5_runs_data(d5_study, feedback, "p_expert")
@@ -50,7 +54,10 @@ st.caption(
     f"Bifurcation: {help_text('bifurcation')}"
 )
 fig = plotting.d5_bifurcation_figure(
-    df, clust_levels, rho_levels, "p_expert",
+    df,
+    clust_levels,
+    rho_levels,
+    "p_expert",
     title=f"Polarization extension (base model) · feedback={feedback} · N = {n_runs} runs per cell",
 )
 st.plotly_chart(fig, use_container_width=True)
@@ -95,7 +102,10 @@ for fb in ["full", "partial"]:
             z=sd_grid.values,
             x=[f"{x:.2g}" for x in sd_grid.columns],
             y=[f"{y:.2g}" for y in sd_grid.index],
-            colorscale=[[0, "#f7f7f7"], [1, plotting._blend_white(plotting.COLOR_EXPERT)]],
+            colorscale=[
+                [0, "#f7f7f7"],
+                [1, plotting._blend_white(plotting.COLOR_EXPERT)],
+            ],
             zmin=0,
             zmax=max(0.25, float(sd_grid.max().max())),
             text=[[f"{v:.2f}" for v in row] for row in sd_grid.values],

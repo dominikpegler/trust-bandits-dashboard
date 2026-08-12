@@ -247,8 +247,8 @@ def render_extension_page(study: str):
     if main_figs:
         st.subheader("Parameter landscape heatmaps")
         st.markdown(
-            "Color = mean p(Expert); white numbers = accuracy gap (Expert − Peers); "
-            "elevated areas = fragility regions (Expert more accurate yet p(Expert) < 0.5); "
+            "Color = mean $p(\\mathrm{Expert})$; white numbers = accuracy gap (Expert − Peers); "
+            "elevated areas = fragility regions (Expert more accurate yet $p(\\mathrm{Expert}) < 0.5$); "
             "dark outline = the selected condition below."
         )
         for fig in main_figs:
