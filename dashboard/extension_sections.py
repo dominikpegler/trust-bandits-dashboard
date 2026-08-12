@@ -83,7 +83,8 @@ def hysteresis_trajectory_figure(df, meta, model_name, feedback, regime):
             fig.add_vline(x=it, line_dash="dash", line_color="white", line_width=1)
 
     fig.update_layout(
-        title=f"Hysteresis trajectory · {model_name} · {regime} · feedback={feedback}",
+        # title=f"Hysteresis trajectory · {model_name} · {regime} · feedback={feedback}",
+        title="",
         xaxis_title="Trial",
         yaxis_title="Choice probability",
         yaxis=dict(range=[0, 1]),

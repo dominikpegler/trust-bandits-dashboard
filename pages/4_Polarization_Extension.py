@@ -58,7 +58,8 @@ fig = plotting.d5_bifurcation_figure(
     clust_levels,
     rho_levels,
     "p_expert",
-    title=f"Polarization extension (base model) · feedback={feedback} · N = {n_runs} runs per cell",
+    # title=f"feedback={feedback} · N = {n_runs} runs per cell",
+    title="",
 )
 st.plotly_chart(fig, use_container_width=True)
 
@@ -78,10 +79,11 @@ with st.expander("Explore trust distributions"):
                 clust_levels,
                 rho_levels,
                 trust_metric,
-                title=(
-                    f"Polarization trust distribution · {plotting.METRIC_LABELS.get(trust_metric, trust_metric)} "
-                    f"· feedback={feedback}"
-                ),
+                # title=(
+                #     f"Polarization trust distribution · {plotting.METRIC_LABELS.get(trust_metric, trust_metric)} "
+                #     f"· feedback={feedback}"
+                # ),
+                title="",
             ),
             use_container_width=True,
         )
